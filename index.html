@@ -125,21 +125,23 @@ const RECIPES=[
   {id:6,name:'Sushi',       dish:'🍣', need:['🍚','🐟','🌿','🥑','🧀'], decoyPool:['🍞','🥩','🍬','🧈','🧅']},
   {id:7,name:'Panqueques',  dish:'🥞', need:['🌾','🥚','🥛','🍯','🧈'], decoyPool:['🍅','🥬','🐟','🧅','🧄']},
   {id:8,name:'Jugo',        dish:'🧃', need:['🍎','💧','🧊','🍋','🍓'], decoyPool:['🥩','🧀','🍞','🌿','🥓']},
-  {id:9,name:'Galaxia',     dish:'🌌', need:['⭐','✨','⚡','🌟','🎵'], decoyPool:['🥔','🥕','🍞','🥩','🧅']},
+  {id:9,name:'Ceviche',     dish:'🍽️', need:['🐟','🍋','🧅','🌿','🌶️'], decoyPool:['🍞','🧀','🥚','🍬','🧈']},
 ];
 
-const LEVEL_DATA=[
-  {clients:1,recipeIds:[0],     timeLimit:90},
-  {clients:1,recipeIds:[0,1],   timeLimit:85},
-  {clients:1,recipeIds:[1,2],   timeLimit:80},
-  {clients:1,recipeIds:[2,3],   timeLimit:75},
-  {clients:2,recipeIds:[0,1,2,3],timeLimit:70},
-  {clients:2,recipeIds:[2,3,4,5],timeLimit:65},
-  {clients:2,recipeIds:[4,5,6], timeLimit:60},
-  {clients:2,recipeIds:[5,6,7], timeLimit:58},
-  {clients:3,recipeIds:[6,7,8,9],timeLimit:55},
-  {clients:3,recipeIds:[7,8,9], timeLimit:50},
+// XP thresholds for each rank (5 min game = ~18000 ticks = ~300s)
+// XP per good plate: ~30-80. Need ~600 XP for Master Chef.
+// Rough: 8-10 plates/min * 50xp avg = 400-500 xp/min → 5min = 2000-2500 XP
+const XP_RANKS=[
+  {xp:0,    label:'Aprendiz',     emoji:'🧑‍🍳', maxClients:1, recipePool:[0,1],     patience:75},
+  {xp:80,   label:'Cocinero',     emoji:'👨‍🍳', maxClients:1, recipePool:[0,1,2],   patience:70},
+  {xp:200,  label:'Chef Junior',  emoji:'🍳',  maxClients:2, recipePool:[0,1,2,3], patience:65},
+  {xp:380,  label:'Chef',         emoji:'🍕',  maxClients:2, recipePool:[2,3,4,5], patience:60},
+  {xp:600,  label:'Chef Senior',  emoji:'🍔',  maxClients:2, recipePool:[3,4,5,6], patience:55},
+  {xp:880,  label:'Sous Chef',    emoji:'🍣',  maxClients:3, recipePool:[4,5,6,7], patience:50},
+  {xp:1200, label:'Chef Estrella',emoji:'⭐',  maxClients:3, recipePool:[5,6,7,8], patience:46},
+  {xp:1600, label:'Master Chef',  emoji:'🏆',  maxClients:3, recipePool:[6,7,8,9], patience:42},
 ];
+const XP_VICTORY=2000; // ~5min of good play
 
 // ─── SHOP CATALOG ──────────────────────────────────────────────────
 const SHOP_ITEMS=[
@@ -174,12 +176,12 @@ const TABLES=[ZONES.table1,ZONES.table2,ZONES.table3];
 // GAME STATE
 // ═══════════════════════════════════════════════════════════════════
 let G={
-  state:'menu', // menu|collect|cooking|deliver|result|gameover|victory
-  level:1,
-  lives:3,
+  state:'menu', // menu|collect|cooking|deliver|gameover|victory
+  xp:0,
+  rankIdx:0,      // index into XP_RANKS
+  stars:3,        // 3 stars = lives; lose on bad plate/burn/patience
   score:0,
   money:0,
-  stars:0,
   best: +localStorage.getItem('sch2_best')||0,
   bestMoney: +localStorage.getItem('sch2_money')||0,
   // Upgrades
@@ -206,10 +208,12 @@ let G={
   // Collected ingredients in hand
   collected:[],
   holding:null, // {type:'ing',icon} | {type:'plate',recipe,quality}
-  // Customers this level
-  clients:[],
-  currentClient:0,
-  clientsServed:0,
+  // Dynamic client queue
+  clients:[],           // active clients at tables
+  clientQueue:[],       // clients waiting to be seated
+  nextClientTick:0,     // when to try seating next client
+  clientSpawnTick:0,    // when to spawn next client into queue
+  totalServed:0,
   // Tray of ready plates
   tray:[],
   // Cooking fill bar (0→1, advances forward)
@@ -488,7 +492,7 @@ function drawShelf(){
     const d=Math.hypot(samCX()-(it.x+26), samCY()-(it.y+26));
     if(d<44 && d<nearestDist){nearestDist=d;nearestIdx=i;}
   });
-  const cur=G.clients[G.currentClient];
+  const cur=G.clients.find(c=>c.status==='waiting');
   shelfItems.forEach((it,i)=>{
     const bob=Math.sin(G.ticks*0.04+it.anim)*2;
     const near=(i===nearestIdx) && !it.taken;
@@ -827,20 +831,25 @@ function drawHUD(){
   px(0,0,GW,52,'rgba(20,10,0,0.9)');
   px(0,50,GW,3,'#f59f00');
 
-  // Lives
-  txt('❤'.repeat(Math.max(0,~~G.lives))+'🖤'.repeat(Math.max(0,3-~~G.lives)),14,26,18,'#ff4444','left');
-  // Level
-  txt('LVL '+G.level+'/10',130,26,16,'#ffd700','left');
-  // Score
-  txt('⭐'+G.score,220,26,16,'#ffd700','left');
+  // Stars (lives)
+  txt('⭐'.repeat(Math.max(0,~~G.stars))+'☆'.repeat(Math.max(0,3-~~G.stars)),14,26,20,'#ffd700','left');
+  // Rank
+  const rank=currentRank();
+  txt(rank.emoji+' '+rank.label,96,26,15,'#ffd700','left');
   // Money
-  txt('💰$'+G.money,330,26,16,'#51cf66','left');
-  // Stars this level
-  const totalC=G.clients.length;
-  const servedC=G.clients.filter(c=>c.status==='eating'||c.status==='done').length;
-  txt('🍽️'+servedC+'/'+totalC,450,26,16,'#fff','left');
-  // Best
-  txt('🏆$'+G.best,560,26,14,'#aaa','left');
+  txt('💰$'+G.money,320,26,16,'#51cf66','left');
+  // Score
+  txt('🏆$'+G.best,440,26,13,'#aaa','left');
+
+  // XP progress bar
+  const nextRankIdx=Math.min(XP_RANKS.length-1,currentRankIdx()+1);
+  const xpStart=currentRank().xp;
+  const xpEnd=XP_RANKS[nextRankIdx].xp||XP_VICTORY;
+  const xpFrac=Math.min(1,(G.xp-xpStart)/Math.max(1,xpEnd-xpStart));
+  const barX=14,barY=36,barW=560,barH=10;
+  px(barX,barY,barW,barH,'rgba(0,0,0,0.4)');
+  px(barX,barY,barW*xpFrac,barH,'#ffd700');
+  txt('XP '+G.xp+'/'+XP_VICTORY,barX+barW/2,barY+5,9,'rgba(255,255,255,0.7)','center');
 
   // Active upgrades icon strip (right side of HUD)
   {
@@ -883,7 +892,7 @@ function drawHUD(){
 // ═══════════════════════════════════════════════════════════════════
 function drawIngredientPanel(){
   if(G.state==='cooking'||G.state==='menu'||G.state==='gameover'||G.state==='victory')return;
-  const cur=G.clients[G.currentClient];
+  const cur=G.clients.find(c=>c.status==='waiting');
   if(!cur)return;
 
   // Panel bottom-center above mobile buttons
@@ -1235,23 +1244,65 @@ function drawGameOver(){
 }
 function drawVictory(){
   ctx.fillStyle='rgba(255,240,100,0.2)';ctx.fillRect(0,0,GW,GH);
-  spawnParticles(GW/2,GH/2,['#fff','#ffe066','#ff8fab','#9bf6ff','#b197fc'],3,true);
-  const pw=560,ph=360,px2=(GW-pw)/2,py2=(GH-ph)/2;
+  spawnParticles(GW/2,GH/2,['#fff','#ffe066','#ff8fab','#9bf6ff','#b197fc'],4,true);
+  const pw=560,ph=380,px2=(GW-pw)/2,py2=(GH-ph)/2;
   px(px2,py2,pw,ph,'rgba(255,248,210,0.98)','#ffd700',6);
-  txt('🏆 ¡MASTER CHEF! 🏆',GW/2,py2+70,30,'#5c2e00','center',true);
-  txt('¡Completaste los 10 niveles!',GW/2,py2+115,20,'#7a4000','center');
-  txt('Puntaje final: '+G.score,GW/2,py2+155,22,'#f59f00','center');
-  txt('Dinero total: $'+G.money,GW/2,py2+190,20,'#51cf66','center');
-  txt('Estrellas: '+G.stars+'/30',GW/2,py2+222,18,'#ffd700','center');
-  txt('¡Nuevo récord! $'+G.best,GW/2,py2+256,16,'#f59f00','center');
-  txt('Toca para jugar de nuevo',GW/2,py2+308,15,'#5c2e00','center');
+  txt('🏆 ¡MASTER CHEF! 🏆',GW/2,py2+55,28,'#5c2e00','center',true);
+  txt('¡Felicidades, Samantina!',GW/2,py2+95,18,'#7a4000','center');
+  txt('Alcanzaste '+G.xp+' XP',GW/2,py2+130,20,'#f59f00','center');
+  txt('Platos servidos: '+G.totalServed,GW/2,py2+162,18,'#5c2e00','center');
+  txt('Dinero ganado: $'+G.money,GW/2,py2+194,18,'#51cf66','center');
+  txt('Mejor puntuacion: $'+G.best,GW/2,py2+224,16,'#f59f00','center');
+  em('🏆',GW/2,py2+280,52);
+  px(px2+40,py2+320,pw-80,50,'#f59f00','#5c2e00',4);
+  txt('Toca para jugar de nuevo',GW/2,py2+345,16,'#3a1000','center');
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// INIT LEVEL
+// INIT GAME (XP-based, no levels)
 // ═══════════════════════════════════════════════════════════════════
-function initLevel(){
-  const ld=LEVEL_DATA[G.level-1];
+function currentRank(){
+  let r=XP_RANKS[0];
+  for(let i=XP_RANKS.length-1;i>=0;i--){if(G.xp>=XP_RANKS[i].xp){r=XP_RANKS[i];break;}}
+  return r;
+}
+function currentRankIdx(){
+  let idx=0;
+  for(let i=XP_RANKS.length-1;i>=0;i--){if(G.xp>=XP_RANKS[i].xp){idx=i;break;}}
+  return idx;
+}
+function patienceForRank(){
+  return (currentRank().patience + G.upgrades.extraTime)*60;
+}
+
+function spawnClientIntoQueue(){
+  const rank=currentRank();
+  const pool=rank.recipePool;
+  const rId=pool[~~(Math.random()*pool.length)];
+  const rec=RECIPES[rId];
+  // Find free table slot
+  const usedTables=G.clients.filter(c=>c.status!=='done').map(c=>c.tableIdx);
+  const freeTable=TABLES.findIndex((_,i)=>!usedTables.includes(i));
+  if(freeTable<0)return; // all tables full
+  G.clients.push({
+    id:G.totalServed+G.clients.length,
+    tableIdx:freeTable,
+    recipe:rec,
+    gender:Math.random()>0.5?'woman':'man',
+    status:'arriving',
+    arrivalT:0,
+    departureT:0,
+    patienceTimer:0,
+    patienceMax:patienceForRank(),
+    reaction:null,
+    stars:0,
+    bobOff:Math.random()*Math.PI*2,
+    angerFrame:0,
+  });
+  buildShelf();
+}
+
+function initGame(){
   G.ticks=0;
   G.collected=[];
   G.holding=null;
@@ -1259,39 +1310,12 @@ function initLevel(){
   G.cookFill=0;
   G.secretActive=false;G.secretTimer=0;G.secretBonus=false;
   secretSpawnedThisLevel=false;
-  G.stoves.forEach(s=>{s.state='idle';s.item=null;s.timer=0;s.max=0;s.recipeId=-1;});
+  G.stoves.forEach(s=>{s.state='idle';s.item=null;s.timer=0;s.max=0;});
   particles=[];floats=[];
-
-  // Spawn customers
   G.clients=[];
-  G.currentClient=0;
-  G.clientsServed=0;
-  const pool=[...ld.recipeIds].sort(()=>Math.random()-0.5);
-  for(let i=0;i<ld.clients;i++){
-    const rId=pool[i%pool.length];
-    const rec=RECIPES[rId];
-    G.clients.push({
-      id:i,
-      tableIdx:i,
-      recipe:rec,
-      gender:Math.random()>0.5?'woman':'man',
-      status:'arriving',   // arriving|waiting|eating|leaving|done
-      arrivalT:0,          // arrival animation timer (walk in from right)
-      departureT:0,        // departure animation timer
-      patienceTimer:0,
-      patienceMax:(ld.timeLimit+G.upgrades.extraTime)*60,
-      reaction:null,
-      stars:0,
-      bobOff:Math.random()*Math.PI*2,
-      angerFrame:0,        // anger gesture animation frame
-    });
-  }
-
-  // Build shelf: all needed ingredients + decoys
-  buildShelf();
-
+  G.totalServed=0;
+  G.clientSpawnTick=120; // first client after 2s
   Sam.x=300;Sam.y=420;Sam.face='normal';Sam.faceTimer=0;Sam.walkTimer=0;
-
   G.state='collect';
   startBGMusic('collect');
 }
@@ -1300,14 +1324,14 @@ function buildShelf(){
   shelfItems=[];
 
   // Always include ALL 5 ingredients of the CURRENT active client
-  const cur=G.clients[G.currentClient];
+  const cur=G.clients.find(c=>c.status==='waiting');
   if(!cur)return;
   const needed=[...cur.recipe.need]; // always exactly 5, no dedup
 
   // Also include needed ingredients of other waiting clients (bonus)
   const otherNeeded=new Set();
   G.clients.forEach((cl,ci)=>{
-    if(ci===G.currentClient||cl.status!=='waiting')return;
+    if(cl===cur||cl.status!=='waiting')return;
     cl.recipe.need.forEach(ic=>{if(!needed.includes(ic))otherNeeded.add(ic);});
   });
 
@@ -1487,7 +1511,7 @@ function doCook(){
       return;
     }
     // Detect which client this is for
-    const cur=G.clients[G.currentClient];
+    const cur=G.clients.find(c=>c.status==='waiting');
     if(!cur||cur.status!=='waiting'){
       addFloat('No hay cliente activo',Sam.x+17,Sam.y,'#ff6b6b');
       return;
@@ -1523,7 +1547,7 @@ function pressTiming(){
   else if(n>=0.25&&n<=0.75)quality='ok';
   else quality='burned';
 
-  const cur=G.clients[G.currentClient];
+  const cur=G.clients.find(c=>c.status==='waiting');
   // Use the ingredients from prep (what was actually cooked)
   const cookedWith=G.prep.correctIngredients.length>0 ? G.prep.correctIngredients : G.collected;
   const need=cur.recipe.need;
@@ -1550,7 +1574,7 @@ function pressTiming(){
     playBurn();
     G.lives--;
     Sam.face='burn';Sam.faceTimer=90;
-    const burnClient=G.clients[G.currentClient];
+    const burnClient=G.clients.find(c=>c.status==='waiting');
     if(burnClient){
       burnClient.reaction='burn';burnClient.stars=0;burnClient.status='eating';
       spawnParticles(TABLES[burnClient.tableIdx].x+55,TABLES[burnClient.tableIdx].y,['#333','#444','#888'],18);
@@ -1586,8 +1610,8 @@ function pressTiming(){
 
 function tryDeliver(){
   if(!G.holding||G.holding.type!=='plate')return;
-  const cur=G.clients[G.currentClient];
-  if(!cur||cur.status!=='waiting'){
+  const cur=G.clients.find(c=>c.status==='waiting');
+  if(!cur){
     addFloat('No hay cliente esperando',Sam.x+17,Sam.y,'#ff6b6b');
     return;
   }
@@ -1604,16 +1628,16 @@ function tryDeliver(){
 
   if(quality==='burned'){
     reaction='burn';stars=0;earned=0;
-    G.lives--;Sam.face='burn';Sam.faceTimer=80;screenShake=12;
+    G.stars--;Sam.face='burn';Sam.faceTimer=80;screenShake=12;
     playBurn();
     spawnParticles(t.x+t.w/2,t.y,['#333','#555','#888'],18);
-    addFloat('🔥 Plato quemado! -❤',t.x+t.w/2,t.y-20,'#ff4444',1.2);
+    addFloat('🔥 Quemado! -⭐',t.x+t.w/2,t.y-20,'#ff4444',1.2);
   } else if(!rightRecipe||quality==='bad'){
     reaction='bad';stars=0;earned=0;
-    G.lives--;Sam.face='bad';Sam.faceTimer=80;screenShake=10;
+    G.stars--;Sam.face='bad';Sam.faceTimer=80;screenShake=10;
     playFail();
     spawnParticles(t.x+t.w/2,t.y,['#333','#555','#999'],15);
-    addFloat('🤢 Horrible! -❤',t.x+t.w/2,t.y-20,'#ff6b6b',1.2);
+    addFloat('🤢 Horrible! -⭐',t.x+t.w/2,t.y-20,'#ff6b6b',1.2);
   } else {
     // Good!
     const patienceFrac=1-cur.patienceTimer/cur.patienceMax;
@@ -1622,14 +1646,27 @@ function tryDeliver(){
     // If client waited too long → almost nothing. Fast delivery → good reward.
     const base=quality==='perfect'?40:20;
     const pBonus=~~(patienceFrac*patienceFrac*60); // quadratic: drops fast when slow
-    const levelBonus=G.level*3;
-    earned=base+pBonus+levelBonus;
+    const rankBonus=currentRankIdx()*4;
+    earned=base+pBonus+rankBonus;
     // Max possible: perfect+instant = 40+60+30 = 130 at level 10
     // Typical: ok+half patience = 20+15+level = ~45 at mid game
     if(G.secretBonus){earned*=2;G.secretBonus=false;addFloat('✨ x2 BONUS! +$'+(earned)+'→$'+(earned),t.x+t.w/2,t.y-50,'#ffd700',1.5);}
     if(G.upgrades.doublePoints&&quality==='perfect'){earned*=2;addFloat('⭐ x2 PERFECTO!',t.x+t.w/2,t.y-64,'#ffd700',1.3);}
+    // XP gain: quality + patience bonus
+    const xpGain=quality==='perfect'?40:25;
+    const xpBonus=~~(patienceFrac*20);
+    G.xp+=xpGain+xpBonus;
+    // Rank-up notification
+    const newRankIdx=currentRankIdx();
+    if(newRankIdx>G.rankIdx){
+      G.rankIdx=newRankIdx;
+      const rank=XP_RANKS[newRankIdx];
+      addFloat(rank.emoji+' '+rank.label+'!',GW/2,GH/2-60,'#ffd700',1.6);
+      playSuccess();
+    }
+    checkVictory();
     reaction='happy';
-    G.score+=earned;G.money+=earned;G.stars+=stars;
+    G.score+=earned;G.money+=earned;
     Sam.face='happy';Sam.faceTimer=100;
     playSuccess();playCoin();
     spawnParticles(t.x+t.w/2,t.y,['#fff','#ffe066','#ff8fab','#9bf6ff','#b197fc'],40,true);
@@ -1645,37 +1682,25 @@ function tryDeliver(){
 
   checkGameOver();
 
-  // Advance to next client or finish level
   setTimeout(()=>{
     cur.status='leaving';cur.departureT=0;
-    // Find next waiting client
-    const nextIdx=G.clients.findIndex(c=>c.status==='waiting');
-    if(nextIdx>=0){
-      G.currentClient=nextIdx;
-      buildShelf(); // rebuild shelf for new client's recipe
-      addFloat('Nuevo pedido: '+G.clients[nextIdx].recipe.name,GW/2,GH/2,'#f59f00',1.2);
-    } else {
-      // All clients served - level complete
-      levelComplete();
-    }
-  },2500);
+    G.totalServed++;
+    // Find next waiting client automatically
+    const next=G.clients.find(c=>c.status==='waiting');
+    if(next) buildShelf();
+  },2200);
 }
 
-function levelComplete(){
-  if(G.level>=10){
+function checkVictory(){
+  if(G.xp>=XP_VICTORY&&G.state!=='victory'){
     G.state='victory';
     stopBGMusic();
     [523,659,784,1046,1318].forEach((f,i)=>beep(f,0.2,'triangle',0.05,i*0.12));
-  } else {
-    G.level++;
-    stopBGMusic();
-    addFloat('¡Nivel superado! Nivel '+G.level,GW/2,GH/2,'#51cf66',1.5);
-    setTimeout(()=>initLevel(),1800);
   }
 }
 
 function checkGameOver(){
-  if(G.lives<=0){
+  if(G.stars<=0){
     G.state='gameover';
     stopBGMusic();
     playFail();
@@ -1683,16 +1708,14 @@ function checkGameOver(){
 }
 
 function startGame(){
-  G.level=1;G.score=0;G.money=0;G.stars=0;
-  G.lives=shopBought.includes('life')?4:3;
+  G.xp=0;G.score=0;G.money=0;G.stars=3;G.rankIdx=0;G.totalServed=0;
   // Apply upgrades from shop
   G.upgrades.hatColor=shopBought.includes('hatGold')?'gold':shopBought.includes('hatBlue')?'blue':shopBought.includes('hatPink')?'pink':'white';
-  G.upgrades.extraTime=(shopBought.includes('time2')?30:0)+(shopBought.includes('time1')?15:0);
+  G.upgrades.extraTime=(shopBought.includes('time2')?10:0)+(shopBought.includes('time1')?5:0);
   G.upgrades.fasterWalk=shopBought.includes('walk');
   G.upgrades.biggerRange=shopBought.includes('range');
   G.upgrades.doublePoints=shopBought.includes('double');
-  G.upgrades.extraLife=shopBought.includes('life');
-  initLevel();
+  initGame();
 }
 
 function resetToMenu(){
@@ -1808,13 +1831,13 @@ function update(){
         G.holding=null;
         G.prep.active=false;
         G.cookStoveIdx=p.targetStove;
-        const cur=G.clients[G.currentClient];
+        const cur=G.clients.find(c=>c.status==='waiting');
         G.stoves[p.targetStove].state='cooking';
         G.stoves[p.targetStove].item={dish:cur.recipe.dish,recipeId:cur.recipe.id};
         G.stoves[p.targetStove].max=400;
         G.stoves[p.targetStove].timer=0;
         G.cookFill=0;
-        G.cookSpeed=0.0018+G.level*0.00025;
+        G.cookSpeed=0.0018+currentRankIdx()*0.0004;
         G.state='cooking';
         startBGMusic('cooking');
         spawnParticles(stoveCX,stoveCY,['#ff922b','#ffe066','#ff3b30'],12);
@@ -1836,7 +1859,8 @@ function update(){
       G.stoves[G.cookStoveIdx].item=null;
       G.stoves[G.cookStoveIdx].timer=0;
       G.collected=[];G.holding=null;
-      G.lives--;screenShake=16;Sam.face='burn';Sam.faceTimer=90;
+      G.stars--;screenShake=16;Sam.face='burn';Sam.faceTimer=90;
+      addFloat('🔥 Quemado! -⭐',GW/2,GH/2-40,'#ff4444',1.3);
       G.state='collect';
       stopBGMusic();startBGMusic('collect');
       playBurn();checkGameOver();
@@ -1844,18 +1868,39 @@ function update(){
     return;
   }
 
-  // Client arrival animation (stagger by index)
-  G.clients.forEach((cl,ci)=>{
+  // Client arrival/departure animations
+  G.clients.forEach(cl=>{
     if(cl.status==='arriving'){
-      if(G.ticks<ci*40)return; // stagger arrivals
-      cl.arrivalT+=4;
-      if(cl.arrivalT>=100){cl.arrivalT=100;cl.status='waiting';}
+      cl.arrivalT+=3;
+      if(cl.arrivalT>=100){cl.arrivalT=100;cl.status='waiting';buildShelf();}
     }
     if(cl.status==='leaving'){
       cl.departureT+=3;
       if(cl.departureT>=100){cl.departureT=100;cl.status='done';}
     }
   });
+  // Prune done clients
+  if(G.clients.filter(c=>c.status==='done').length>6){
+    G.clients=G.clients.filter(c=>c.status!=='done');
+  }
+
+  // Dynamic client spawning based on XP rank
+  if(G.state==='collect'||G.state==='deliver'||G.state==='prep'){
+    G.clientSpawnTick--;
+    if(G.clientSpawnTick<=0){
+      const rank=currentRank();
+      const activeClients=G.clients.filter(c=>c.status!=='done'&&c.status!=='leaving').length;
+      if(activeClients<rank.maxClients){
+        spawnClientIntoQueue();
+        // Next spawn: random interval based on rank (faster at higher rank)
+        const minWait=Math.max(8,20-G.rankIdx*2); // seconds
+        const maxWait=Math.max(15,35-G.rankIdx*3);
+        G.clientSpawnTick=(minWait+Math.random()*(maxWait-minWait))*60;
+      } else {
+        G.clientSpawnTick=120; // check again in 2s
+      }
+    }
+  }
 
   // Patience timers for waiting clients — PAUSED while shop is open
   if(G.shopOpen)return;
