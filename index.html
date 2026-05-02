@@ -1,1 +1,1610 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<title>Samantina Chef Pixel PRO</title>
+<style>
+*{box-sizing:border-box}
+html,body{
+  margin:0;width:100%;height:100%;overflow:hidden;
+  background:#f6c891;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  touch-action:none;
+}
+canvas{
+  width:100vw;height:100dvh;display:block;
+  image-rendering:pixelated;
+  background:#f6c891;
+}
+.btn{
+  position:fixed;z-index:20;border:none;border-radius:18px;
+  font-weight:900;box-shadow:0 6px 16px rgba(0,0,0,.25);
+  user-select:none;-webkit-user-select:none;
+}
+#actionBtn{
+  right:18px;bottom:calc(18px + env(safe-area-inset-bottom));
+  width:116px;height:64px;background:#ffef9f;border:4px solid #7a3b14;
+  font-size:16px;color:#3a1d0a;
+}
+#cookBtn{
+  left:50%;transform:translateX(-50%);
+  bottom:calc(18px + env(safe-area-inset-bottom));
+  width:140px;height:64px;background:#ff9ec7;border:4px solid #7a2045;
+  font-size:16px;color:#3a1024;
+}
+#soundBtn{
+  left:16px;top:14px;width:52px;height:44px;background:#fff;border:3px solid #333;
+  font-size:20px;
+}
+</style>
+</head>
+<body>
+<canvas id="game" width="960" height="640"></canvas>
 
+<button id="soundBtn" class="btn">🔊</button>
+
+<button id="cookBtn" class="btn">🍳 COCINAR</button>
+<button id="actionBtn" class="btn">AGARRAR</button>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+ctx.imageSmoothingEnabled=false;
+
+const W=960,H=640;
+
+let state="menu"; // menu | collect | cooking | taste | win
+let level=0;
+let score=0;
+let lives=3;
+let timeLeft=75;
+let timer=0;
+let muted=false;
+let phaseText="";
+let phaseTimer=0;
+let selected=[];
+let particles=[];
+let smoke=[];
+let foodOnPan=[];
+let keys={};
+let cookNeedle=0;
+let cookDir=1;
+let cookTicks=0;
+let cookResult=null;
+let cameraShake=0;
+let expressionAnim=0;
+let best=Number(localStorage.getItem("samantina_best")||0);
+let musicTimer=null;
+let musicStep=0;
+let musicMode="";
+let musicStarted=false;
+
+const recipes=[
+ {name:"Ensalada Feliz", dish:"🥗", need:["lechuga","tomate","pepino","zanahoria","aceite"], decoys:["chocolate","helado","galleta","cafe"], bg:"#ffd6df"},
+ {name:"Hamburguesa Mini", dish:"🍔", need:["pan","carne","queso","lechuga","tomate"], decoys:["frutilla","azucar","pescado","arroz"], bg:"#ffd7a8"},
+ {name:"Pizza Arcoíris", dish:"🍕", need:["masa","queso","tomate","oregano","jamon"], decoys:["sandia","limon","palta","leche"], bg:"#ffcfa3"},
+ {name:"Torta Dulce", dish:"🎂", need:["harina","huevo","leche","azucar","mantequilla"], decoys:["ajo","cebolla","salmon","lechuga"], bg:"#ffe0ef"},
+ {name:"Sopa Calientita", dish:"🍲", need:["agua","pollo","papa","zanahoria","sal"], decoys:["chocolate","frutilla","pan","helado"], bg:"#fff0b3"},
+ {name:"Completo Chileno", dish:"🌭", need:["pan","vienesa","palta","tomate","mayonesa"], decoys:["arroz","sushi","galleta","piña"], bg:"#ffdfaf"},
+ {name:"Sushi Kawaii", dish:"🍣", need:["arroz","alga","salmon","palta","queso"], decoys:["pan","carne","azucar","mantequilla"], bg:"#d8f6ff"},
+ {name:"Panqueques", dish:"🥞", need:["harina","huevo","leche","azucar","miel"], decoys:["tomate","lechuga","pescado","cebolla"], bg:"#ffe7c2"},
+ {name:"Jugo Natural", dish:"🧃", need:["fruta","agua","hielo","limon","azucar"], decoys:["carne","queso","pan","jamon"], bg:"#dfffd1"},
+ {name:"Plato Galaxia", dish:"🌌", need:["estrella","luz","magia","energia","polvo"], decoys:["papa","carne","tomate","cafe"], bg:"#c7b9ff"}
+];
+
+const icons={
+ lechuga:"🥬",tomate:"🍅",pepino:"🥒",zanahoria:"🥕",aceite:"🧴",
+ chocolate:"🍫",helado:"🍦",galleta:"🍪",cafe:"☕",
+ pan:"🍞",carne:"🥩",queso:"🧀",frutilla:"🍓",azucar:"🧂",pescado:"🐟",arroz:"🍚",
+ masa:"🍞",oregano:"🌿",jamon:"🥓",sandia:"🍉",limon:"🍋",palta:"🥑",leche:"🥛",
+ harina:"🌾",huevo:"🥚",mantequilla:"🧈",ajo:"🧄",cebolla:"🧅",salmon:"🐟",
+ agua:"💧",pollo:"🍗",papa:"🥔",sal:"🧂",
+ vienesa:"🌭",mayonesa:"🥫",sushi:"🍣",piña:"🍍",
+ alga:"🌿",miel:"🍯",fruta:"🍎",hielo:"🧊",
+ estrella:"⭐",luz:"✨",magia:"🪄",energia:"⚡",polvo:"🌟"
+};
+
+let sam={x:90,y:500,w:44,h:76,face:"normal",dir:"down",walk:0,holding:null};
+let items=[];
+let stove={x:406,y:214,w:150,h:96};
+let table={x:610,y:400,w:300,h:92};
+let customers=[];
+let currentCustomerIndex=0;
+let platedMeal=null;
+let deliveryMode=false;
+let servedThisLevel=0;
+let money=Number(localStorage.getItem('samantina_money')||0);
+let levelStars=0;
+ secretItem=null;
+ secretTimer=0;
+ secretCollected=false;
+ secretBonusReady=false;
+let plates=[];
+let selectedPlateIndex=0;
+let secretItem=null;
+let secretTimer=0;
+let secretCollected=false;
+let secretBonusReady=false;
+
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function rand(a,b){return Math.random()*(b-a)+a}
+function rect(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+
+function beep(f=440,d=.06,type="square",vol=.035){
+ if(muted)return;
+ const ac=window.ac||(window.ac=new (window.AudioContext||window.webkitAudioContext)());
+ const o=ac.createOscillator();
+ const g=ac.createGain();
+ o.frequency.value=f;
+ o.type=type;
+ g.gain.value=vol;
+ g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);
+ o.connect(g);
+ g.connect(ac.destination);
+ o.start();
+ o.stop(ac.currentTime+d+.02);
+}
+
+function noise(d=.12,vol=.025){
+ if(muted)return;
+ const ac=window.ac||(window.ac=new (window.AudioContext||window.webkitAudioContext)());
+ const b=ac.createBuffer(1,ac.sampleRate*d,ac.sampleRate);
+ const data=b.getChannelData(0);
+ for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+ const s=ac.createBufferSource();
+ const g=ac.createGain();
+ s.buffer=b;
+ g.gain.value=vol;
+ s.connect(g);
+ g.connect(ac.destination);
+ s.start();
+}
+
+function startMusic(mode="collect"){
+ if(muted) return;
+ if(musicMode===mode && musicTimer) return;
+ stopMusic();
+ musicMode=mode;
+ musicStep=0;
+ const collectMelody=[392,440,494,523,587,523,494,440,392,523,587,659,587,523,494,440];
+ const cookMelody=[330,392,440,494,440,392,330,294,330,392,523,494,440,392,330,294];
+ const winMelody=[523,659,784,1046,784,659,523,659,784,1046,1174,1046,784,659,523];
+ const melody=mode==="cooking"?cookMelody:(mode==="win"?winMelody:collectMelody);
+ const tempo=mode==="cooking"?210:260;
+ musicTimer=setInterval(()=>{
+  if(muted || state==="menu"){ return; }
+  const note=melody[musicStep%melody.length];
+  beep(note,.10,mode==="cooking"?"square":"triangle",mode==="cooking"?.018:.014);
+  if(musicStep%4===0) beep(note/2,.14,"sine",.010);
+  musicStep++;
+ },tempo);
+}
+function stopMusic(){
+ if(musicTimer) clearInterval(musicTimer);
+ musicTimer=null;
+ musicMode="";
+}
+function ensureMusic(){
+ if(muted){ stopMusic(); return; }
+ if(state==="collect") startMusic("collect");
+ if(state==="cooking") startMusic("cooking");
+ if(state==="taste" && cookResult) startMusic("win");
+}
+
+function customerCountForLevel(){
+ return level<=3 ? 1 : (level<=7 ? 2 : 3);
+}
+function activeOrder(){
+ return customers[currentCustomerIndex] ? customers[currentCustomerIndex].recipe : recipes[level];
+}
+function buildCustomers(){
+ customers=[];
+ const count=customerCountForLevel();
+ const orderPool=shuffle(recipes.map((r,i)=>i).filter(i=>i!==level));
+ const indexes=[level,...orderPool].slice(0,count);
+ const positions=[
+  {x:720,y:330},
+  {x:650,y:330},
+  {x:790,y:330}
+ ];
+ for(let i=0;i<count;i++){
+  const recipeIndex=indexes[i%indexes.length];
+  customers.push({
+   x:positions[i].x,
+   y:positions[i].y,
+   w:58,
+   h:72,
+   gender:Math.random()>.5?"woman":"man",
+   recipe:recipes[recipeIndex],
+   recipeIndex,
+   status:"waiting", // waiting | happy | bad | burned
+   reactionTimer:0,
+   patience:1000-level*45-i*80,
+   maxPatience:1000-level*45-i*80,
+   reactionJump:0,
+   served:false,
+   bob:rand(0,20)
+  });
+ }
+ currentCustomerIndex=0;
+ servedThisLevel=0;
+}
+
+function scatterIngredientsForOrder(){
+ const order=activeOrder();
+ const decoys=shuffle(recipes.flatMap(r=>r.decoys).concat(recipes.flatMap(r=>r.need))).filter((v,i,a)=>a.indexOf(v)===i && !order.need.includes(v)).slice(0,4);
+ const all=shuffle([...order.need,...decoys]);
+ const spots=[
+  [62,205],[165,232],[285,205],[585,205],
+  [82,385],[205,430],[335,410],[470,420],
+  [92,515],[245,530],[405,535],[555,515]
+ ];
+ items=all.map((t,i)=>({
+  t,
+  x:spots[i][0],
+  y:spots[i][1],
+  w:42,
+  h:42,
+  taken:false,
+  bob:rand(0,20)
+ }));
+}
+
+function startLevel(n){
+ level=n;
+ state="collect";
+ selected=[];
+ foodOnPan=[];
+ platedMeal=null;
+ deliveryMode=false;
+ plates=[];
+ selectedPlateIndex=0;
+ levelStars=0;
+ secretItem=null;
+ secretTimer=0;
+ secretCollected=false;
+ secretBonusReady=false;
+ cookResult=null;
+ timeLeft=Math.max(55,85-level*3);
+ sam.x=86;
+ sam.y=500;
+ sam.face="normal";
+ sam.holding=null;
+ buildCustomers();
+ scatterIngredientsForOrder();
+ phaseText="Nivel "+(level+1)+": atiende a "+customers.length+" cliente"+(customers.length>1?"s":"")+" — pedido de "+activeOrder().name;
+ phaseTimer=190;
+ ensureMusic();
+}
+function px(x,y,w,h,c){
+ ctx.fillStyle=c;
+ ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));
+}
+
+function txt(t,x,y,size=22,color="#2b1205",align="left",stroke=true){
+ ctx.save();
+ ctx.font=`900 ${size}px "Courier New", monospace`;
+ ctx.textAlign=align;
+ if(stroke){
+  ctx.lineWidth=5;
+  ctx.strokeStyle="rgba(255,255,255,.8)";
+  ctx.strokeText(t,x,y);
+ }
+ ctx.fillStyle=color;
+ ctx.fillText(t,x,y);
+ ctx.restore();
+}
+
+function drawKitchen(){
+ const r=recipes[level]||recipes[0];
+
+ px(0,0,W,H,r.bg);
+ px(0,0,W,108,"#f9c995");
+ txt("SAMANTINA CHEF",W/2,66,48,"#111","center",true);
+
+ for(let y=120;y<355;y+=34){
+  for(let x=0;x<W;x+=78){
+   px(x,y,64,8,"rgba(255,255,255,.65)");
+   px(x,y+18,68,5,"rgba(255,255,255,.55)");
+  }
+ }
+
+ px(18,130,120,82,"#f7f2e5");
+ px(22,136,52,70,"#fefcf7");
+ px(82,136,52,70,"#fefcf7");
+
+ px(150,133,145,72,"#f2d184");
+ px(163,146,14,43,"#f59f00");
+ px(183,146,14,43,"#40c057");
+ px(203,146,14,43,"#3bc9db");
+ px(223,146,14,43,"#845ef7");
+ px(243,146,14,43,"#f06595");
+
+ px(395,114,138,82,"#d8d8d8");
+ px(420,100,85,74,"#efefef");
+ px(390,195,150,18,"#555");
+
+ px(stove.x,stove.y,stove.w,stove.h,"#f5f5f5");
+ px(stove.x+10,stove.y+58,stove.w-20,30,"#b9e9ff");
+ [[18,18],[92,18],[24,61],[99,61]].forEach(p=>{
+  px(stove.x+p[0],stove.y+p[1],35,10,"#555");
+  ctx.beginPath();
+  ctx.arc(stove.x+p[0]+18,stove.y+p[1]+5,16,0,Math.PI*2);
+  ctx.fillStyle="#404040";
+  ctx.fill();
+ });
+
+ // fuego animado permanente, más intenso al cocinar
+ const firePower=state==="cooking" ? Math.min(2.1,1+cookTicks/420) : .85;
+ for(let i=0;i<4;i++){
+  const fx=stove.x+31+i*28;
+  const fy=stove.y+70+Math.sin(timer/5+i)*4;
+  ctx.beginPath();
+  ctx.moveTo(fx,fy+12);
+  ctx.quadraticCurveTo(fx-14*firePower,fy-2,fx,fy-28*firePower-Math.sin(timer/4+i)*5);
+  ctx.quadraticCurveTo(fx+14*firePower,fy-2,fx,fy+12);
+  ctx.fillStyle=i%2?"#ff922b":"#ff3b30";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(fx,fy+8);
+  ctx.quadraticCurveTo(fx-7*firePower,fy-2,fx,fy-15*firePower);
+  ctx.quadraticCurveTo(fx+7*firePower,fy-2,fx,fy+8);
+  ctx.fillStyle="#ffe066";
+  ctx.fill();
+ }
+ px(585,130,8,120,"#333");
+ ["🍳","🍴","🥄"].forEach((u,i)=>txt(u,610+i*45,205,38,"#333","center",false));
+
+ px(730,125,145,90,"#f8e0ff");
+ px(738,138,58,65,"#a5f3ff");
+ px(807,138,58,65,"#a5f3ff");
+
+ px(820,226,118,210,"#f4f4f4");
+ px(825,232,110,92,"#fff");
+ px(825,330,110,100,"#fff");
+ px(821,326,118,8,"#999");
+
+ px(622,242,130,74,"#d6e6ea");
+ ctx.beginPath();
+ ctx.ellipse(687,278,50,24,0,0,Math.PI*2);
+ ctx.fillStyle="#b7d4dc";
+ ctx.fill();
+ px(682,235,12,42,"#8aa6ad");
+
+ px(0,300,W,78,"#cf8745");
+ px(0,378,W,14,"#7a3b14");
+ for(let x=0;x<W;x+=170){
+  px(x+10,398,130,65,"#f5f0e8");
+  px(x+18,406,52,48,"#fff");
+  px(x+78,406,52,48,"#fff");
+ }
+
+ px(0,392,W,H-392,"#c9894f");
+ for(let x=0;x<W;x+=36)px(x,392,3,H-392,"rgba(100,50,15,.25)");
+ for(let y=420;y<H;y+=32)px(0,y,W,3,"rgba(100,50,15,.18)");
+
+ // mesa restaurante
+ px(table.x-20,table.y-20,table.w+40,table.h+28,"#7a3b14");
+ px(table.x,table.y,table.w,table.h,"#8b4a25");
+ px(table.x+14,table.y+14,table.w-28,table.h-28,"#b7652f");
+ px(table.x+18,table.y+table.h,18,105,"#5b2b12");
+ px(table.x+table.w-36,table.y+table.h,18,105,"#5b2b12");
+ px(table.x-16,table.y+34,16,46,"#5b2b12");
+ px(table.x+table.w,table.y+34,16,46,"#5b2b12");
+ txt("Mesa de clientes",table.x+table.w/2,table.y-30,20,"#552000","center",true);
+
+ px(60,322,110,38,"#e9ecef");
+ txt("🥦🍅🍗",113,350,30,"#111","center",false);
+
+ px(215,232,100,62,"#ced4da");
+ px(230,250,62,30,"#b9e9ff");
+
+ txt("Estufa",stove.x+stove.w/2,stove.y-10,20,"#552000","center",true);
+}
+
+function distanceToSam(item){
+ return Math.hypot(
+  (sam.x+sam.w/2)-(item.x+item.w/2),
+  (sam.y+sam.h/2)-(item.y+item.h/2)
+ );
+}
+
+function drawIngredient(item){
+ const y=item.y+Math.sin((timer+item.bob)/12)*3;
+ const d=distanceToSam(item);
+
+ ctx.save();
+
+ if(d<78){
+  ctx.shadowColor="#ffe066";
+  ctx.shadowBlur=24;
+  px(item.x-10,y-10,66,66,"#fff3bf");
+ }
+
+ ctx.shadowColor="rgba(0,0,0,.25)";
+ ctx.shadowBlur=8;
+ ctx.shadowOffsetY=5;
+ px(item.x-6,y-6,58,58,"#fff6dd");
+ px(item.x-2,y-2,50,50,"#fefefe");
+ ctx.shadowBlur=0;
+
+ if(item.t==="aceite"){
+  // Aceite dibujado como botellita para que no parezca ingrediente raro.
+  px(item.x+13,y+7,17,34,"#f8f9fa");
+  px(item.x+16,y+2,11,8,"#74c0fc");
+  px(item.x+15,y+14,13,20,"#ffd43b");
+  ctx.strokeStyle="#2b1205";
+  ctx.lineWidth=2;
+  ctx.strokeRect(item.x+13,y+7,17,34);
+  txt("oil",item.x+22,y+54,10,"#2b1205","center",false);
+}else{
+  txt(icons[item.t]||"🍽️",item.x+21,y+34,32,"#111","center",false);
+}
+ ctx.restore();
+
+ if(d<78){
+  ctx.strokeStyle="#ffd43b";
+  ctx.lineWidth=4;
+  ctx.strokeRect(item.x-8,y-8,62,62);
+  txt(item.t,item.x+21,y-12,15,"#1c1c1c","center",true);
+ }
+}
+
+function drawCustomer(c,i){
+ const x=c.x;
+ const jump=c.reactionJump>0 ? Math.abs(Math.sin(c.reactionJump/8))*18 : 0;
+ const y=c.y+Math.sin((timer+c.bob)/18)*2-jump;
+ const isActive=i===currentCustomerIndex && !c.served;
+
+ // silla
+ px(x-12,y+50,82,18,"#6b3517");
+ px(x-9,y+64,13,42,"#5b2b12");
+ px(x+56,y+64,13,42,"#5b2b12");
+
+ if(isActive){
+  ctx.save();
+  ctx.shadowColor="#ffe066";
+  ctx.shadowBlur=24;
+  px(x-14,y-10,86,96,"rgba(255,243,191,.45)");
+  ctx.restore();
+ }
+
+ // sombra
+ ctx.globalAlpha=.22;
+ ctx.beginPath();
+ ctx.ellipse(x+30,y+78,28,7,0,0,Math.PI*2);
+ ctx.fillStyle="#000";
+ ctx.fill();
+ ctx.globalAlpha=1;
+
+ // piernas
+ px(x+15,y+61,11,18,"#293241");
+ px(x+36,y+61,11,18,"#293241");
+ px(x+13,y+78,15,6,"#111");
+ px(x+34,y+78,15,6,"#111");
+
+ // cuerpo parecido a Samantina
+ const shirt=i%3===0?"#74c0fc":(i%3===1?"#ffb3c6":"#b197fc");
+ px(x+9,y+35,42,32,shirt);
+ px(x+16,y+36,28,28,"#fff5e6");
+ px(x+11,y+50,38,6,"#3b5bdb");
+
+ // brazos
+ if(c.status==="happy"){
+  px(x-2,y+24,10,28,"#ffc9a3");
+  px(x+52,y+24,10,28,"#ffc9a3");
+ }else if(c.status==="bad" || c.status==="burned"){
+  px(x+0,y+45,10,24,"#ffc9a3");
+  px(x+50,y+45,10,24,"#ffc9a3");
+ }else{
+  px(x+2,y+38,10,24,"#ffc9a3");
+  px(x+48,y+38,10,24,"#ffc9a3");
+ }
+
+ // cabeza
+ let faceColor="#ffc9a3";
+ if(c.status==="bad" || c.status==="burned") faceColor="#80d979";
+
+ ctx.beginPath();
+ ctx.arc(x+30,y+23,24,0,Math.PI*2);
+ ctx.fillStyle=faceColor;
+ ctx.fill();
+
+ // pelo / estilo hombre o mujer, manteniendo estética similar a Samantina
+ if(c.gender==="woman"){
+  ctx.beginPath();
+  ctx.arc(x+30,y+19,27,Math.PI*.72,Math.PI*2.28);
+  ctx.lineWidth=8;
+  ctx.strokeStyle=i%2?"#4a2b13":"#8a4b18";
+  ctx.stroke();
+  // mechones largos
+  px(x+6,y+20,8,28,i%2?"#4a2b13":"#8a4b18");
+  px(x+47,y+20,8,28,i%2?"#4a2b13":"#8a4b18");
+  // moñito/gorro pequeño
+  ctx.beginPath();
+  ctx.arc(x+20,y+2,9,0,Math.PI*2);
+  ctx.arc(x+32,y-3,11,0,Math.PI*2);
+  ctx.arc(x+44,y+2,9,0,Math.PI*2);
+  ctx.fillStyle="#fff";
+  ctx.fill();
+  px(x+18,y+8,30,8,"#fff");
+ }else{
+  // hombre: pelo corto y gorra pequeña
+  ctx.beginPath();
+  ctx.arc(x+30,y+13,24,Math.PI*.92,Math.PI*2.08);
+  ctx.lineWidth=9;
+  ctx.strokeStyle=i%2?"#2b170b":"#5c3514";
+  ctx.stroke();
+  px(x+10,y+6,40,10,i%2?"#2b170b":"#5c3514");
+  px(x+18,y-2,28,10,"#fff");
+  px(x+43,y+2,18,5,"#fff");
+ }
+
+ // expresiones visuales
+ if(c.status==="happy"){
+  // ojos felices y sonrisa
+  px(x+19,y+18,5,5,"#222");
+  px(x+37,y+18,5,5,"#222");
+  ctx.beginPath();
+  ctx.arc(x+30,y+31,12,0,Math.PI);
+  ctx.strokeStyle="#a4161a";
+  ctx.lineWidth=4;
+  ctx.stroke();
+
+  // cielo iluminado dentro del mismo cuadro del cliente
+  ctx.save();
+  ctx.globalAlpha=.32;
+  for(let k=0;k<7;k++){
+   ctx.beginPath();
+   ctx.arc(x+30,y-10,34+k*13,0,Math.PI*2);
+   ctx.fillStyle=["#fff","#ffe066","#ffd6a5"][k%3];
+   ctx.fill();
+  }
+  ctx.restore();
+  txt("✨",x+3,y-8,22,"#fff","center",false);
+  txt("⭐",x+61,y-10,22,"#fff","center",false);
+  txt("✨",x+30,y-22,18,"#fff","center",false);
+
+ }else if(c.status==="bad"){
+  // cara verde, cejas de asco, boca hacia abajo
+  ctx.globalAlpha=.22;
+  ctx.beginPath();
+  ctx.arc(x+30,y+23,24,0,Math.PI*2);
+  ctx.fillStyle="#38b000";
+  ctx.fill();
+  ctx.globalAlpha=1;
+
+  px(x+17,y+18,10,4,"#222");
+  px(x+35,y+18,10,4,"#222");
+  px(x+19,y+14,12,3,"#5f0f40");
+  px(x+31,y+14,12,3,"#5f0f40");
+
+  ctx.beginPath();
+  ctx.arc(x+30,y+38,12,Math.PI,0);
+  ctx.strokeStyle="#5f0f40";
+  ctx.lineWidth=4;
+  ctx.stroke();
+
+  txt("🤢",x+62,y+28,21,"#fff","center",false);
+  txt("💧",x+4,y+13,16,"#fff","center",false);
+
+ }else if(c.status==="burned"){
+  // cara verde oscura/quemada con ojos X
+  ctx.globalAlpha=.5;
+  ctx.beginPath();
+  ctx.arc(x+30,y+23,24,0,Math.PI*2);
+  ctx.fillStyle="#2f2f2f";
+  ctx.fill();
+  ctx.globalAlpha=1;
+
+  txt("×",x+21,y+25,20,"#111","center",false);
+  txt("×",x+40,y+25,20,"#111","center",false);
+
+  ctx.beginPath();
+  ctx.arc(x+30,y+36,7,0,Math.PI*2);
+  ctx.fillStyle="#111";
+  ctx.fill();
+
+  txt("💨",x+56,y+10,17,"#fff","center",false);
+  txt("🔥",x+6,y+37,18,"#fff","center",false);
+
+ }else{
+  px(x+20,y+18,5,5,"#222");
+  px(x+37,y+18,5,5,"#222");
+  px(x+26,y+32,11,3,"#a4161a");
+ }
+
+ // burbuja de pedido arriba, no sobre ingredientes ni sobre la mesa
+ if(!c.served && c.status==="waiting"){
+  const bx=x-78, by=y-98;
+  px(bx,by,206,62,"rgba(255,255,255,.96)");
+  ctx.strokeStyle=isActive?"#f59f00":"#5b2b12";
+  ctx.lineWidth=4;
+  ctx.strokeRect(bx,by,206,62);
+  txt(c.recipe.dish,bx+26,by+43,32,"#111","center",false);
+  txt(c.recipe.name,bx+112,by+24,13,"#2b1205","center",false);
+  txt(c.recipe.need.map(n=>icons[n]).join(""),bx+112,by+48,18,"#111","center",false);
+ }
+
+
+ // barra de paciencia por cliente
+ if(!c.served && c.status==="waiting"){
+  const pw=70, ph=8;
+  const ratio=Math.max(0,c.patience/c.maxPatience);
+  px(x-5,y+90,pw,ph,"#5b2b12");
+  px(x-5,y+90,pw*ratio,ph, ratio>.55?"#51cf66":(ratio>.25?"#ffd43b":"#ff3b30"));
+  ctx.strokeStyle="#2b1205";
+  ctx.lineWidth=2;
+  ctx.strokeRect(x-5,y+90,pw,ph);
+ }
+
+ // plato servido sobre la mesa frente al cliente
+ if(c.served){
+  txt(c.recipe.dish,x+30,y+106,36,"#111","center",false);
+ }
+}
+
+function drawSamantina(){
+ const x=sam.x,y=sam.y;
+ const b=Math.sin(sam.walk/6)*3;
+ const anim=expressionAnim;
+ const happyLift=sam.face==="happy" ? Math.sin(anim/6)*5 : 0;
+ const badShake=sam.face==="bad" ? Math.sin(anim*0.9)*3 : 0;
+ const burnShake=sam.face==="burn" ? Math.sin(anim*1.2)*4 : 0;
+
+ ctx.save();
+ ctx.translate(badShake+burnShake, -happyLift);
+
+ // sombra
+ ctx.globalAlpha=.25;
+ ctx.beginPath();
+ ctx.ellipse(x+23,y+72+happyLift,24,7,0,0,Math.PI*2);
+ ctx.fillStyle="#000";
+ ctx.fill();
+ ctx.globalAlpha=1;
+
+ // piernas
+ px(x+9,y+56+b,11,18,"#293241");
+ px(x+27,y+56-b,11,18,"#293241");
+ px(x+7,y+72+b,15,6,"#111");
+ px(x+25,y+72-b,15,6,"#111");
+
+ // vestido / delantal
+ px(x+5,y+30,38,32,"#70d06b");
+ px(x+12,y+30,24,31,"#fff5e6");
+ px(x+9,y+42,30,6,"#2b9348");
+
+ // brazos expresivos
+ if(sam.face==="happy"){
+  // brazos arriba mirando al cielo
+  px(x-8,y+18,11,30,"#ffc9a3");
+  px(x+45,y+18,11,30,"#ffc9a3");
+  txt("✨",x-8,y+12,22,"#fff","center",false);
+  txt("🌟",x+58,y+8,22,"#fff","center",false);
+ }else if(sam.face==="bad"){
+  // brazos hacia abajo / asco
+  px(x-5,y+40,11,26,"#ffc9a3");
+  px(x+42,y+40,11,26,"#ffc9a3");
+  txt("🤢",x+58,y+42,24,"#fff","center",false);
+ }else if(sam.face==="burn"){
+  // brazos alarmados
+  px(x-10,y+22,11,28,"#ffc9a3");
+  px(x+47,y+22,11,28,"#ffc9a3");
+  txt("🔥",x+58,y+42,25,"#fff","center",false);
+ }else{
+  px(x-2,y+34,10,24,"#ffc9a3");
+  px(x+40,y+34,10,24,"#ffc9a3");
+ }
+
+ // cuello y cara
+ px(x+18,y+24,12,9,"#ffc9a3");
+ ctx.beginPath();
+ ctx.arc(x+24,y+19,22,0,Math.PI*2);
+ ctx.fillStyle="#ffc9a3";
+ ctx.fill();
+
+ // pelo
+ ctx.beginPath();
+ ctx.arc(x+24,y+18,26,Math.PI*.78,Math.PI*2.25);
+ ctx.lineWidth=8;
+ ctx.strokeStyle="#8a4b18";
+ ctx.stroke();
+
+ // gorro chef
+ ctx.beginPath();
+ ctx.arc(x+13,y+1,12,0,Math.PI*2);
+ ctx.arc(x+25,y-6,15,0,Math.PI*2);
+ ctx.arc(x+39,y+1,12,0,Math.PI*2);
+ ctx.fillStyle="#fff";
+ ctx.fill();
+ px(x+10,y+8,32,10,"#fff");
+
+ // expresiones reales del personaje
+ if(sam.face==="happy"){
+  // mira hacia arriba: ojos altos + sonrisa grande + luz
+  px(x+14,y+13,6,6,"#222");
+  px(x+31,y+13,6,6,"#222");
+  ctx.beginPath();
+  ctx.arc(x+25,y+29,12,0,Math.PI);
+  ctx.strokeStyle="#a4161a";
+  ctx.lineWidth=4;
+  ctx.stroke();
+
+  // mejillas
+  ctx.globalAlpha=.55;
+  ctx.beginPath();ctx.arc(x+11,y+27,5,0,Math.PI*2);ctx.fillStyle="#ff8fab";ctx.fill();
+  ctx.beginPath();ctx.arc(x+39,y+27,5,0,Math.PI*2);ctx.fillStyle="#ff8fab";ctx.fill();
+  ctx.globalAlpha=1;
+
+  // rayos de éxito sobre la cabeza
+  for(let i=0;i<8;i++){
+   const a=anim*.08+i*Math.PI*2/8;
+   const sx=x+24+Math.cos(a)*44;
+   const sy=y-2+Math.sin(a)*30;
+   txt(i%2?"✨":"⭐",sx,sy,18,"#fff","center",false);
+  }
+
+ }else if(sam.face==="bad"){
+  // desagrado: cejas caídas, boca torcida, verde en cara
+  ctx.globalAlpha=.23;
+  ctx.beginPath();ctx.arc(x+24,y+20,23,0,Math.PI*2);ctx.fillStyle="#7bd88f";ctx.fill();
+  ctx.globalAlpha=1;
+
+  // ojos con asco
+  px(x+13,y+17,8,4,"#222");
+  px(x+31,y+17,8,4,"#222");
+  px(x+15,y+14,10,3,"#5f0f40");
+  px(x+27,y+14,10,3,"#5f0f40");
+
+  // boca invertida / torcida
+  ctx.beginPath();
+  ctx.arc(x+25,y+35,12,Math.PI,0);
+  ctx.strokeStyle="#5f0f40";
+  ctx.lineWidth=4;
+  ctx.stroke();
+  px(x+34,y+31,7,4,"#5f0f40");
+
+  // gotitas de asco
+  txt("💧",x+3,y+13,17,"#fff","center",false);
+  txt("💧",x+46,y+25,16,"#fff","center",false);
+
+ }else if(sam.face==="burn"){
+  // quemado: cara oscura, ojos X, boca abierta, humo
+  ctx.globalAlpha=.45;
+  ctx.beginPath();ctx.arc(x+24,y+20,23,0,Math.PI*2);ctx.fillStyle="#3b2f2f";ctx.fill();
+  ctx.globalAlpha=1;
+
+  txt("×",x+16,y+23,20,"#111","center",false);
+  txt("×",x+34,y+23,20,"#111","center",false);
+
+  ctx.beginPath();
+  ctx.arc(x+25,y+33,7,0,Math.PI*2);
+  ctx.fillStyle="#111";
+  ctx.fill();
+
+  txt("💨",x+5,y+0,18,"#fff","center",false);
+  txt("💨",x+47,y+8,18,"#fff","center",false);
+
+ }else{
+  px(x+14,y+18,5,5,"#222");
+  px(x+31,y+18,5,5,"#222");
+  px(x+21,y+29,8,3,"#a4161a");
+ }
+
+ if(sam.holding){
+  const holdIcon=sam.holding==="plato" ? (platedMeal && platedMeal.recipe ? platedMeal.recipe.dish : "🍽️") : (icons[sam.holding]||"🍽️");
+  txt(holdIcon,x+48,y+56,30,"#111","center",false);
+ }
+
+ ctx.restore();
+}
+function stoveBlockRect(){
+ // Bloquea solo el cuerpo central de la estufa, permite acercarse por el frente/lados.
+ return {x:stove.x+14,y:stove.y+20,w:stove.w-28,h:stove.h-30};
+}
+
+
+function spawnSecretIngredient(){
+ if(secretItem || secretCollected || state==="cooking" || state==="taste" || state==="win" || state==="menu") return;
+
+ const spots=[
+  [78,185],[210,185],[350,190],[565,185],
+  [80,360],[245,372],[430,365],[565,420],
+  [95,525],[300,520],[505,525]
+ ];
+ const s=spots[Math.floor(Math.random()*spots.length)];
+ secretItem={
+  x:s[0],
+  y:s[1],
+  w:48,
+  h:48,
+  bob:rand(0,20)
+ };
+ secretTimer=180; // 3 segundos aprox a 60 FPS
+ phaseText="✨ ¡Ingrediente secreto apareció!";
+ phaseTimer=75;
+}
+
+function drawSecretIngredient(){
+ if(!secretItem) return;
+ const y=secretItem.y+Math.sin((timer+secretItem.bob)/6)*5;
+ const pulse=1+Math.sin(timer/5)*.08;
+
+ ctx.save();
+ ctx.shadowColor="#ffd43b";
+ ctx.shadowBlur=28;
+ ctx.globalAlpha=.9;
+ ctx.beginPath();
+ ctx.arc(secretItem.x+24, y+24, 34*pulse, 0, Math.PI*2);
+ ctx.fillStyle="rgba(255,224,102,.55)";
+ ctx.fill();
+
+ px(secretItem.x-6,y-6,60,60,"#fff3bf");
+ ctx.strokeStyle="#f59f00";
+ ctx.lineWidth=5;
+ ctx.strokeRect(secretItem.x-6,y-6,60,60);
+
+ txt("✨",secretItem.x+24,y+21,28,"#111","center",false);
+ txt("🧂",secretItem.x+24,y+43,28,"#111","center",false);
+ ctx.restore();
+
+ txt("SECRETO",secretItem.x+24,y-12,14,"#7a3b14","center",true);
+}
+
+function tryCollectSecret(){
+ if(!secretItem || secretCollected) return;
+ const body={x:sam.x,y:sam.y,w:sam.w,h:sam.h};
+ const target={x:secretItem.x-8,y:secretItem.y-8,w:64,h:64};
+ if(rect(body,target)){
+  secretCollected=true;
+  secretBonusReady=true;
+  secretItem=null;
+  secretTimer=0;
+  phaseText="✨ Ingrediente secreto: si cocinas bien, puntaje x2";
+  phaseTimer=120;
+  beep(1320,.09,"triangle",.05);
+  setTimeout(()=>beep(1660,.1,"triangle",.04),90);
+ }
+}
+
+function update(){
+ timer++;
+ expressionAnim++;
+
+ // Ingrediente secreto: aparece ocasionalmente por 3 segundos.
+ if(state==="collect" || state==="deliver"){
+  if(!secretCollected && !secretItem && timer%520===0) spawnSecretIngredient();
+  if(secretItem){
+   secretTimer--;
+   if(secretTimer<=0){
+    secretItem=null;
+    secretTimer=0;
+   }
+   tryCollectSecret();
+  }
+ }
+
+ if(phaseTimer>0)phaseTimer--;
+ if(cameraShake>0)cameraShake--;
+
+ particles.forEach(p=>{
+  p.x+=p.vx;
+  p.y+=p.vy;
+  p.vy+=.04;
+  p.life--;
+ });
+ particles=particles.filter(p=>p.life>0);
+
+ smoke.forEach(p=>{
+  p.y-=p.v;
+  p.x+=Math.sin(timer/10+p.o)*.4;
+  p.life--;
+ });
+ smoke=smoke.filter(p=>p.life>0);
+ customers.forEach(c=>{ if(c.reactionTimer>0)c.reactionTimer--; if(c.reactionJump>0)c.reactionJump--; });
+
+ if(state==="collect" || state==="deliver"){
+  customers.forEach((c,idx)=>{
+   if(!c.served && c.status==="waiting"){
+    c.patience--;
+    if(c.patience<=0){
+     c.patience=0;
+     c.status="bad";
+     c.reactionTimer=180;
+     lives--;
+     if(idx===currentCustomerIndex){
+      phaseText="El cliente perdió la paciencia";
+      phaseTimer=120;
+     }
+    }
+   }
+  });
+  if(state==="collect"){
+   if(timer%60===0)timeLeft--;
+   if(timeLeft<=0){
+    lives--;
+    showTaste(false,"⏱️ Se acabó el tiempo");
+   }
+  }
+
+  let dx=0,dy=0;
+  if(keys.ArrowLeft||keys.a)dx=-1;
+  if(keys.ArrowRight||keys.d)dx=1;
+  if(keys.ArrowUp||keys.w)dy=-1;
+  if(keys.ArrowDown||keys.s)dy=1;
+
+  if(dx||dy){
+   let oldX=sam.x;
+   let oldY=sam.y;
+   let m=Math.hypot(dx,dy);
+   sam.x+=dx/m*3.5;
+   sam.y+=dy/m*3.5;
+   sam.walk++;
+   sam.dir=Math.abs(dx)>Math.abs(dy)?(dx>0?"right":"left"):(dy>0?"down":"up");
+
+   // La estufa es sólida, pero SOLO se bloquea en zona de recolección.
+   // Al llevar el plato, Samantina puede rodearla y caminar libremente hacia la mesa.
+   if(state==="collect"){
+    const body={x:sam.x+6,y:sam.y+26,w:sam.w-12,h:sam.h-20};
+    if(rect(body,stoveBlockRect())){
+     sam.x=oldX;
+     sam.y=oldY;
+     phaseText="Cuidado: la estufa quema. Acércate de frente y presiona COCINAR.";
+     phaseTimer=80;
+    }
+   }
+  }
+
+  sam.x=Math.max(10,Math.min(W-55,sam.x));
+  sam.y=Math.max(140,Math.min(H-82,sam.y));
+ }
+
+ if(state==="deliver"){
+  const c=customers[currentCustomerIndex];
+  if(c && !c.served){
+   const zone=customerDeliveryZone(c);
+   const body={x:sam.x+4,y:sam.y+24,w:sam.w-8,h:sam.h-18};
+   if(rect(body,zone)){
+    phaseText="Presiona AGARRAR, ENTER o COCINAR para entregar";
+    phaseTimer=25;
+   }
+  }
+ }
+
+ if(state==="cooking"){
+  cookTicks++;
+  cookNeedle+=cookDir*(.012+level*.0018);
+
+  if(cookNeedle>1){
+   cookNeedle=1;
+   cookDir=-1;
+  }
+
+  if(cookNeedle<0){
+   cookNeedle=0;
+   cookDir=1;
+  }
+
+  if(cookTicks%6===0){
+   smoke.push({
+    x:stove.x+75+rand(-20,20),
+    y:stove.y+18,
+    v:rand(.8,1.7),
+    o:rand(0,6),
+    life:55,
+    c:cookTicks>520?"#333":"#fff"
+   });
+  }
+
+  if(cookTicks>650){
+   lives--;
+   cameraShake=22;
+   beep(90,.18,"sawtooth",.05);
+   showTaste(false,"🔥 Se quemó por esperar mucho");
+  }
+ }
+}
+
+/* FIX REAL: ahora detecta todos los ingredientes no tomados */
+function nearestItem(){
+ let near=null;
+ let dist=999;
+
+ for(const it of items){
+  if(it.taken) continue;
+
+  const d=Math.hypot(
+   (sam.x+sam.w/2)-(it.x+it.w/2),
+   (sam.y+sam.h/2)-(it.y+it.h/2)
+  );
+
+  if(d<dist){
+   dist=d;
+   near=it;
+  }
+ }
+
+ return dist<78 ? near : null;
+}
+
+/* FIX REAL: permite agarrar hasta 5 ingredientes sin bloquearse */
+function grab(){
+ if(state==="menu"){
+  startLevel(0);
+  return;
+ }
+
+ if(state==="taste"){
+  next();
+  return;
+ }
+
+ if(state==="win"){
+  level=0;
+  score=0;
+  lives=3;
+  startLevel(0);
+  return;
+ }
+
+ if(state==="deliver"){
+  const c=customers[currentCustomerIndex];
+  const zone=c?customerDeliveryZone(c):null;
+  const body={x:sam.x+4,y:sam.y+24,w:sam.w-8,h:sam.h-18};
+  if(zone && rect(body,zone)){
+   startCooking();
+  }else{
+   state="collect";
+   phaseText="Puedes juntar ingredientes para otro plato o ir a entregar";
+   phaseTimer=90;
+  }
+  return;
+ }
+
+ if(state!=="collect") return;
+
+ const it=nearestItem();
+
+ if(!it){
+  phaseText="Acércate más al ingrediente";
+  phaseTimer=70;
+  beep(190,.07);
+  return;
+ }
+
+ if(selected.length>=5){
+  phaseText="Ya tienes 5 ingredientes. Ve a la estufa.";
+  phaseTimer=80;
+  beep(250,.07);
+  return;
+ }
+
+ it.taken=true;
+ selected.push(it.t);
+ sam.holding=it.t;
+
+ beep(800,.05);
+ phaseText="✔ "+it.t+" ("+selected.length+"/5)";
+ phaseTimer=90;
+}
+
+function startCooking(){
+ if(state==="deliver"){
+  const c=customers[currentCustomerIndex];
+  if(c){
+   const zone=customerDeliveryZone(c);
+   const body={x:sam.x+4,y:sam.y+24,w:sam.w-8,h:sam.h-18};
+   const nearStoveForMore=Math.hypot((sam.x+sam.w/2)-(stove.x+stove.w/2),(sam.y+sam.h/2)-(stove.y+stove.h/2))<135;
+
+   if(rect(body,zone)){
+    deliverToCustomer();
+   }else if(nearStoveForMore && selected.length===5){
+    // Permite múltiples platos: puedes cocinar otro antes de entregar.
+    state="collect";
+    startCooking();
+   }else{
+    phaseText="Entrega en el área amarilla o cocina otro plato si tienes 5 ingredientes";
+    phaseTimer=90;
+    beep(220,.08);
+   }
+  }
+  return;
+ }
+
+ if(state==="collect"){
+  if(selected.length<5){
+   phaseText="Debes juntar 5 ingredientes";
+   phaseTimer=90;
+   beep(180,.08);
+   return;
+  }
+
+  const nearStove=Math.hypot((sam.x+sam.w/2)-(stove.x+stove.w/2),(sam.y+sam.h/2)-(stove.y+stove.h/2))<135;
+
+  if(!nearStove){
+   phaseText="Lleva los ingredientes a la estufa";
+   phaseTimer=100;
+   beep(240,.07);
+   return;
+  }
+
+  state="cooking";
+  phaseText="Cocinando para: "+activeOrder().name;
+  phaseTimer=110;
+  cookNeedle=0;
+  cookDir=1;
+  cookTicks=0;
+  sam.x=stove.x-60;
+  sam.y=stove.y+30;
+  sam.face="normal";
+  sam.holding=null;
+  noise(.18,.025);
+  foodOnPan=[...selected];
+  ensureMusic();
+ }else if(state==="cooking"){
+  pressTiming();
+ }
+}
+
+function pressTiming(){
+ const perfect=cookNeedle>.43&&cookNeedle<.57;
+ const ok=cookNeedle>.32&&cookNeedle<.68;
+ const r=activeOrder();
+ const correct=selected.filter(x=>r.need.includes(x)).length;
+ const allCorrect=correct===5 && selected.length===5;
+
+ const newPlate={
+  recipe:r,
+  selected:[...selected],
+  cookedPerfect:perfect,
+  cookedOk:ok,
+  burned:!ok,
+  horrible:!allCorrect,
+  good:(perfect||ok)&&allCorrect
+ };
+
+ plates.push(newPlate);
+ selectedPlateIndex=plates.length-1;
+ platedMeal=plates[selectedPlateIndex];
+
+ sam.holding="plato";
+ deliveryMode=true;
+ state="deliver";
+ cookResult=null;
+ selected=[];
+ foodOnPan=[];
+ phaseText="Plato agregado a la bandeja ("+plates.length+"). Llévalo o cocina otro.";
+ phaseTimer=150;
+ beep(newPlate.good?880:150,.12,newPlate.good?"triangle":"sawtooth",.04);
+ ensureMusic();
+}
+
+function customerDeliveryZone(c){
+ // Zona amplia frente a la mesa y alrededor del cliente activo.
+ // Así Samantina no necesita tocar al cliente pixel-perfect.
+ return {
+  x:table.x-120,
+  y:table.y-120,
+  w:table.w+240,
+  h:table.h+240
+ };
+}
+
+function deliverToCustomer(){
+ const c=customers[currentCustomerIndex];
+ if(!c) return;
+ if(!platedMeal && plates.length>0) platedMeal=plates[selectedPlateIndex]||plates[0];
+ if(!platedMeal) return;
+
+ c.served=true;
+ c.reactionTimer=360;
+
+ if(platedMeal.good){
+  c.status="happy";
+  const earned=20+level*5+Math.floor(c.patience/60);
+  const basePoints=120+level*25+timeLeft*2+earned;
+  const multiplier=secretBonusReady ? 2 : 1;
+  money+=earned*multiplier;
+  localStorage.setItem('samantina_money',money);
+  levelStars++;
+  score+=basePoints*multiplier;
+  c.reactionJump=240;
+  if(secretBonusReady){
+   phaseText="✨ Ingrediente secreto: puntaje x2";
+   phaseTimer=150;
+   for(let b=0;b<40;b++){
+    particles.push({x:c.x+30,y:c.y-10,vx:rand(-4,4),vy:rand(-6,1),life:rand(45,90),c:"#ffe066"});
+   }
+   secretBonusReady=false;
+  }
+  for(let i=0;i<65;i++){
+   particles.push({
+    x:c.x+28,
+    y:c.y+8,
+    vx:rand(-3,3),
+    vy:rand(-5,1),
+    life:rand(45,95),
+    c:["#fff","#ffe066","#ff8fab","#9bf6ff","#bdb2ff"][i%5]
+   });
+  }
+  beep(880,.08);setTimeout(()=>beep(1170,.1),90);setTimeout(()=>beep(1560,.12),180);
+ }else{
+  c.status=platedMeal.burned?"burned":"bad";
+  lives--;
+  cameraShake=18;
+  for(let i=0;i<24;i++){
+   smoke.push({x:c.x+28+rand(-15,15),y:c.y+20,v:rand(.8,1.8),o:rand(0,6),life:70,c:"#333"});
+  }
+  beep(120,.18,"sawtooth",.05);
+ }
+
+ selected=[];
+ foodOnPan=[];
+ platedMeal=null;
+ deliveryMode=false;
+ plates=[];
+ selectedPlateIndex=0;
+ levelStars=0;
+ secretItem=null;
+ secretTimer=0;
+ secretCollected=false;
+ secretBonusReady=false;
+ sam.holding=null;
+ servedThisLevel++;
+ currentCustomerIndex++;
+
+ if(score>best){
+  best=score;
+  localStorage.setItem("samantina_best",best);
+ }
+
+ if(lives<=0){
+  phaseText="Juego terminado";
+  phaseTimer=180;
+  setTimeout(()=>{state="menu";score=0;lives=3;level=0;},900);
+  return;
+ }
+
+ if(servedThisLevel>=customers.length){
+  if(level>=recipes.length-1){
+   state="win";
+   sam.face="happy";
+   ensureMusic();
+  }else{
+   phaseText="¡Mesa atendida! Siguiente nivel";
+   phaseTimer=120;
+   setTimeout(()=>startLevel(level+1),900);
+  }
+ }else{
+  state=plates.length>0?"deliver":"collect";
+  sam.face="normal";
+  scatterIngredientsForOrder();
+  timeLeft=Math.max(45,timeLeft+35);
+  phaseText="Nuevo pedido: "+activeOrder().name;
+  phaseTimer=150;
+  ensureMusic();
+ }
+}
+
+function showTaste(success,msg){
+ state="taste";
+ cookResult=success;
+ phaseText=msg;
+ phaseTimer=999;
+ sam.face=success?"happy":(msg.includes("quem")?"burn":"bad");
+ expressionAnim=0;
+ ensureMusic();
+
+ if(success){
+  for(let i=0;i<80;i++){
+   particles.push({
+    x:W/2,
+    y:180,
+    vx:rand(-4,4),
+    vy:rand(-6,1),
+    life:rand(50,110),
+    c:["#fff","#ffe066","#ff8fab","#9bf6ff","#bdb2ff"][i%5]
+   });
+  }
+  beep(880,.08);
+  setTimeout(()=>beep(1170,.1),90);
+  setTimeout(()=>beep(1560,.12),180);
+ }else{
+  for(let i=0;i<25;i++){
+   smoke.push({
+    x:stove.x+75+rand(-30,30),
+    y:stove.y+20,
+    v:rand(1,2.4),
+    o:rand(0,6),
+    life:80,
+    c:"#333"
+   });
+  }
+  beep(120,.18,"sawtooth",.05);
+ }
+
+ if(score>best){
+  best=score;
+  localStorage.setItem("samantina_best",best);
+ }
+}
+
+function next(){
+ if(lives<=0){
+  state="menu";
+  score=0;
+  lives=3;
+  level=0;
+  return;
+ }
+
+ if(cookResult && level<recipes.length-1){
+  startLevel(level+1);
+ }else if(cookResult && level>=recipes.length-1){
+  state="win";
+  sam.face="happy";
+ }else{
+  startLevel(level);
+ }
+}
+
+function drawHUD(){
+ px(12,12,W-24,76,"rgba(255,255,255,.88)");
+ ctx.strokeStyle="#3a1d0a";
+ ctx.lineWidth=4;
+ ctx.strokeRect(12,12,W-24,76);
+
+ const r=activeOrder()||recipes[0];
+ txt(`Nivel ${level+1}/10  Cliente ${Math.min(currentCustomerIndex+1,customers.length)}/${customers.length}: ${r.name}`,92,42,20,"#2b1205");
+ txt(`❤ ${lives}   ⭐ ${score}   💰 ${money}   🌟 ${levelStars}/${customers.length}   ⏱ ${timeLeft}s`,92,72,18,"#2b1205");
+ txt(secretBonusReady ? "✨ Secreto activo: próximo plato bueno x2" : (plates.length>0 ? `🍽️ Bandeja: ${plates.map(p=>p.recipe.dish).join(" ")} (${plates.length})` : `Ingredientes: ${selected.map(x=>icons[x]).join(" ")} ${selected.length}/5`),W-30,72,20,"#2b1205","right");
+
+ if(phaseTimer>0){
+  px(170,98,W-340,42,"rgba(0,0,0,.62)");
+  txt(phaseText,W/2,126,18,"#fff","center",false);
+ }
+}
+
+function drawCooking(){
+ px(0,0,W,H,"rgba(0,0,0,.45)");
+ px(170,120,620,365,"#fff1c9");
+ ctx.strokeStyle="#5b2b12";
+ ctx.lineWidth=7;
+ ctx.strokeRect(170,120,620,365);
+
+ txt("¡Momento exacto para "+activeOrder().name+"!",W/2,165,28,"#3a1d0a","center");
+ txt("Presiona COCINAR o ESPACIO cuando la aguja esté en verde",W/2,200,18,"#3a1d0a","center");
+
+ ctx.beginPath();
+ ctx.ellipse(W/2,286,120,48,0,0,Math.PI*2);
+ ctx.fillStyle="#383838";
+ ctx.fill();
+
+ px(W/2+90,275,135,22,"#2b2b2b");
+ txt("🍳",W/2,304,80,"#111","center",false);
+
+ foodOnPan.forEach((f,i)=>txt(icons[f],W/2-70+i*35,295+Math.sin(timer/8+i)*4,31,"#111","center",false));
+
+ for(let i=0;i<8;i++){
+  ctx.beginPath();
+  ctx.arc(W/2-70+i*20,350+Math.sin(timer/5+i)*5,13,0,Math.PI*2);
+  ctx.fillStyle=i%2?"#ff922b":"#ff3b30";
+  ctx.fill();
+ }
+
+ const bx=250,by=405,bw=460,bh=34;
+ px(bx,by,bw,bh,"#d9480f");
+ px(bx+bw*.32,by,bw*.36,bh,"#ffd43b");
+ px(bx+bw*.43,by,bw*.14,bh,"#2f9e44");
+
+ px(bx+bw*cookNeedle-5,by-16,10,bh+32,"#fff");
+ ctx.strokeStyle="#111";
+ ctx.lineWidth=3;
+ ctx.strokeRect(bx+bw*cookNeedle-5,by-16,10,bh+32);
+
+ txt(cookTicks>520?"¡SE QUEMA!":"Perfecto en el centro verde",W/2,462,20,cookTicks>520?"#d00000":"#1b5e20","center");
+}
+
+function drawTaste(){
+ px(0,0,W,H,cookResult?"rgba(255,240,160,.55)":"rgba(60,40,30,.55)");
+
+ if(cookResult){
+  for(let i=0;i<9;i++){
+   ctx.globalAlpha=.28;
+   ctx.beginPath();
+   ctx.arc(W/2,150,80+i*45,0,Math.PI*2);
+   ctx.fillStyle=["#fff","#ffe066","#ffd6a5"][i%3];
+   ctx.fill();
+  }
+  ctx.globalAlpha=1;
+ }
+
+ px(215,115,530,405,"#fff7dd");
+ ctx.strokeStyle="#5b2b12";
+ ctx.lineWidth=7;
+ ctx.strokeRect(215,115,530,405);
+
+ txt(cookResult?"¡DELICIOSO!":"¡OH NO!",W/2,180,34,cookResult?"#15803d":"#9d0208","center");
+
+ const oldX=sam.x, oldY=sam.y;
+ sam.x=455;
+ sam.y=240;
+ drawSamantina();
+ sam.x=oldX;
+ sam.y=oldY;
+
+ txt((recipes[level]||recipes[0]).dish,W/2,342,92,"#111","center",false);
+ txt("Presiona AGARRAR / Enter para continuar",W/2,462,18,"#2b1205","center");
+}
+
+function drawMenu(){
+ drawKitchen();
+
+ px(180,145,600,330,"rgba(255,247,221,.94)");
+ ctx.strokeStyle="#5b2b12";
+ ctx.lineWidth=8;
+ ctx.strokeRect(180,145,600,330);
+
+ txt("SAMANTINA CHEF",W/2,210,44,"#2b1205","center");
+ txt("Atiende clientes, cocina varios platos y gana dinero/estrellas",W/2,260,20,"#2b1205","center");
+ txt("Flechas/WASD para moverte  •  AGARRAR para recoger  •  C para cocinar",W/2,305,18,"#2b1205","center");
+ txt("El cliente reacciona: verde si está horrible/quemado, feliz si le gusta",W/2,335,18,"#9d0208","center");
+
+ const oldX=sam.x, oldY=sam.y, oldFace=sam.face;
+ sam.x=454;
+ sam.y=365;
+ sam.face="normal";
+ drawSamantina();
+ sam.x=oldX;
+ sam.y=oldY;
+ sam.face=oldFace;
+
+ txt("Presiona AGARRAR o Enter para jugar",W/2,525,24,"#2b1205","center");
+}
+
+function drawWin(){
+ drawKitchen();
+
+ px(160,140,640,360,"rgba(255,255,255,.92)");
+ ctx.strokeStyle="#5b2b12";
+ ctx.lineWidth=8;
+ ctx.strokeRect(160,140,640,360);
+
+ txt("🏆 ¡SAMANTINA MASTER CHEF!",W/2,230,38,"#2b1205","center");
+ txt("Puntaje final: "+score,W/2,285,26,"#15803d","center");
+ txt("Mejor puntaje: "+best+"   Dinero: $"+money,W/2,325,22,"#2b1205","center");
+
+ const oldX=sam.x, oldY=sam.y, oldFace=sam.face;
+ sam.x=455;
+ sam.y=360;
+ sam.face="happy";
+ drawSamantina();
+ sam.x=oldX;
+ sam.y=oldY;
+ sam.face=oldFace;
+
+ txt("AGARRAR / Enter para jugar de nuevo",W/2,540,22,"#2b1205","center");
+}
+
+function draw(){
+ ctx.save();
+
+ if(cameraShake>0){
+  ctx.translate(rand(-5,5),rand(-5,5));
+ }
+
+ if(state==="menu"){
+  drawMenu();
+  ctx.restore();
+  return;
+ }
+
+ if(state==="win"){
+  drawWin();
+  ctx.restore();
+  return;
+ }
+
+ drawKitchen();
+
+ if(state==="deliver" && customers[currentCustomerIndex]){
+  const dz=customerDeliveryZone(customers[currentCustomerIndex]);
+  ctx.save();
+  ctx.globalAlpha=.18;
+  px(dz.x,dz.y,dz.w,dz.h,"#ffe066");
+  ctx.globalAlpha=1;
+  ctx.setLineDash([8,8]);
+  ctx.strokeStyle="#f59f00";
+  ctx.lineWidth=4;
+  ctx.strokeRect(dz.x,dz.y,dz.w,dz.h);
+  ctx.setLineDash([]);
+  ctx.restore();
+ }
+
+ items.forEach(i=>{
+  if(!i.taken)drawIngredient(i);
+ });
+
+ drawSecretIngredient();
+
+ customers.forEach((c,i)=>drawCustomer(c,i));
+
+ // bandeja con múltiples platos preparados
+ if(plates.length>0){
+  px(30,92,210,46,"rgba(255,255,255,.9)");
+  ctx.strokeStyle="#5b2b12";ctx.lineWidth=3;ctx.strokeRect(30,92,210,46);
+  txt("Bandeja",76,122,16,"#2b1205","center",false);
+  plates.forEach((p,i)=>txt(p.recipe.dish,128+i*32,124,28,"#111","center",false));
+ }
+
+ drawSamantina();
+ drawHUD();
+
+ smoke.forEach(s=>{
+  ctx.globalAlpha=Math.max(0,s.life/80)*.6;
+  ctx.beginPath();
+  ctx.arc(s.x,s.y,18+(80-s.life)*.3,0,Math.PI*2);
+  ctx.fillStyle=s.c||"#fff";
+  ctx.fill();
+  ctx.globalAlpha=1;
+ });
+
+ particles.forEach(p=>{
+  ctx.globalAlpha=Math.max(0,p.life/100);
+  px(p.x,p.y,7,7,p.c);
+  ctx.globalAlpha=1;
+ });
+
+ if(state==="cooking")drawCooking();
+ if(state==="taste")drawTaste();
+
+ ctx.restore();
+}
+
+function loop(){
+ update();
+ ensureMusic();
+ draw();
+ requestAnimationFrame(loop);
+}
+
+document.addEventListener("keydown",e=>{
+ keys[e.key]=true;
+
+ if(e.key==="Enter"){
+  grab();
+ }
+
+ if(e.code==="Space"){
+  e.preventDefault();
+  if(state==="cooking")pressTiming();
+  else grab();
+ }
+ if(e.key==="c" || e.key==="C"){
+  startCooking();
+ }
+});
+
+document.addEventListener("keyup",e=>{
+ keys[e.key]=false;
+});
+
+document.getElementById("actionBtn").onclick=grab;
+document.getElementById("cookBtn").onclick=startCooking;
+
+document.getElementById("soundBtn").onclick=()=>{
+ muted=!muted;
+ document.getElementById("soundBtn").textContent=muted?"🔇":"🔊";
+ if(muted) stopMusic(); else ensureMusic();
+};
+
+canvas.addEventListener("click",()=>{
+ if(state==="menu"||state==="taste"||state==="win")grab();
+});
+
+loop();
+</script>
+</body>
+</html>
