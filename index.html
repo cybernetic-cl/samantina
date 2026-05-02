@@ -146,8 +146,8 @@ const SHOP_ITEMS=[
   {id:'hatPink',  label:'Gorro Rosa',    emoji:'🎀', desc:'Cambia el gorro de Samantina a rosa',price:80,  type:'hat',   value:'pink'},
   {id:'hatBlue',  label:'Gorro Azul',    emoji:'💙', desc:'Gorro azul especial',                price:120, type:'hat',   value:'blue'},
   {id:'hatGold',  label:'Gorro Dorado',  emoji:'👑', desc:'El gorro más exclusivo',             price:220, type:'hat',   value:'gold'},
-  {id:'time1',    label:'+15s por nivel', emoji:'⏱', desc:'Clientes esperan 15s más',           price:70,  type:'time',  value:15},
-  {id:'time2',    label:'+30s por nivel', emoji:'⌛', desc:'Clientes esperan 30s más',           price:150, type:'time',  value:30},
+  {id:'time1',    label:'+5s por nivel',  emoji:'⏱', desc:'Clientes esperan 5s más',            price:60,  type:'time',  value:5},
+  {id:'time2',    label:'+10s por nivel', emoji:'⌛', desc:'Clientes esperan 10s más',           price:110, type:'time',  value:10},
   {id:'walk',     label:'Zapatos Turbo', emoji:'👟', desc:'Samantina corre más rápido',          price:130, type:'walk',  value:true},
   {id:'range',    label:'Brazos Largos', emoji:'🦾', desc:'Agarra ingredientes desde más lejos',price:100, type:'range', value:true},
   {id:'double',   label:'Puntos x2',     emoji:'⭐', desc:'Duplica puntos por plato perfecto',  price:180, type:'double',value:true},
@@ -544,17 +544,17 @@ function drawCustomers(){
     const pFrac=1-cl.patienceTimer/cl.patienceMax;
     const angry=pFrac<0.3&&cl.status==='waiting';
     const angerShake=angry?Math.sin(G.ticks*0.4)*4:0;
-    const basY=t.y-30+(angry?Math.sin(G.ticks*0.3)*3:0);
+    const basY=t.y-75+(angry?Math.sin(G.ticks*0.3)*3:0);
     const cy=basY+bob+angerShake;
 
     // Chair
     px(cx-20,t.y+t.h+2,40,10,'#6b3810');
     px(cx-18,t.y+t.h+10,12,26,'#5c2a00');
     px(cx+6,t.y+t.h+10,12,26,'#5c2a00');
-    // Chair back
-    px(cx-18,t.y-42,6,44,'#5c2a00');
-    px(cx+12,t.y-42,6,44,'#5c2a00');
-    px(cx-18,t.y-46,36,8,'#6b3810');
+    // Chair back (behind character, drawn first)
+    px(cx-18,t.y-66,6,68,'#5c2a00');
+    px(cx+12,t.y-66,6,68,'#5c2a00');
+    px(cx-18,t.y-70,36,8,'#6b3810');
 
     // Shadow
     ctx.globalAlpha=0.18;
@@ -637,27 +637,27 @@ function drawCustomers(){
       px(cx-3,cy-4,6,3,'#a4161a');
     }
 
-    // ORDER BUBBLE (waiting clients)
+    // ORDER BUBBLE — sits above the character's head
     if(cl.status==='waiting'||cl.status==='arriving'){
-      const bw=126,bh=72;
-      // For multiple clients, offset bubbles to avoid overlap
-      const bx=t.x+(t.w-bw)/2, by=t.y-90;
+      const bw=130,bh=56;
+      const bx=cx-bw/2;
+      // Place bubble above head (head top ≈ cy-32)
+      const by=cy-44-bh;
       const isActive=(ci===G.currentClient);
       // shadow
       px(bx+3,by+3,bw,bh,'rgba(0,0,0,0.25)');
-      // box
       px(bx,by,bw,bh,'#fffde7',isActive?'#f59f00':'#c49040',isActive?4:2);
-      // tail pointing down to table
-      const tailX=t.x+t.w/2;
+      // tail pointing down toward head
       ctx.beginPath();
-      ctx.moveTo(tailX-7,by+bh);ctx.lineTo(tailX+7,by+bh);ctx.lineTo(tailX,by+bh+10);
+      ctx.moveTo(cx-6,by+bh);ctx.lineTo(cx+6,by+bh);ctx.lineTo(cx,by+bh+10);
       ctx.fillStyle='#fffde7';ctx.fill();
       ctx.strokeStyle=isActive?'#f59f00':'#c49040';ctx.lineWidth=isActive?4:2;ctx.stroke();
-      // dish icon + name
-      em(cl.recipe.dish,bx+20,by+36,28);
-      txt(cl.recipe.name,bx+74,by+18,11,'#5c2e00','center',true);
-      // needed icons (max 5 in a row)
-      cl.recipe.need.slice(0,5).forEach((ic,ni)=>em(ic,bx+16+ni*22,by+54,14));
+      // dish icon
+      em(cl.recipe.dish,bx+22,by+bh/2,28);
+      // recipe name
+      txt(cl.recipe.name,bx+70,by+14,11,'#5c2e00','center',true);
+      // ingredient icons row
+      cl.recipe.need.slice(0,5).forEach((ic,ni)=>em(ic,bx+42+ni*20,by+38,14));
     }
 
     // PATIENCE BAR
@@ -870,12 +870,12 @@ function drawHUD(){
     txt('✨ BONUS x2 ✨',790,26,14,'#ffd700','center',true);
     ctx.restore();
   }
-  // Holding indicator (only show if no upgrades or small strip)
-  if(G.holding&&!G.upgrades.fasterWalk&&!G.upgrades.biggerRange&&!G.upgrades.doublePoints&&!G.upgrades.extraLife&&G.upgrades.hatColor==='white'&&G.upgrades.extraTime===0){
-    px(GW-180,4,176,44,'rgba(80,40,0,0.7)','#c49040',2);
-    if(G.holding.type==='ing') txt('Cargando: '+G.holding.icon,GW-95,26,13,'#fff','center');
-    else txt('Plato: '+G.holding.dish,GW-95,26,13,'#fff','center');
-  }
+  // Shop button in-game (bottom-right of HUD bar)
+  const shopBtnX=GW-88,shopBtnY=6,shopBtnW=82,shopBtnH=42;
+  px(shopBtnX,shopBtnY,shopBtnW,shopBtnH,'#2a1000','#f59f00',2);
+  txt('🛒',shopBtnX+shopBtnW/2,shopBtnY+14,16,'#ffd700','center');
+  txt('$'+G.money,shopBtnX+shopBtnW/2,shopBtnY+32,11,'#51cf66','center');
+  drawHUD._shopRect={x:shopBtnX,y:shopBtnY,w:shopBtnW,h:shopBtnH};
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1024,6 +1024,9 @@ function drawShop(){
   px(0,60,GW,4,'#f59f00');
   txt('🛒 TIENDA',GW/2,32,28,'#ffd700','center',true);
   txt('💰 $'+G.money,18,34,20,'#51cf66','left');
+  // Active upgrades summary
+  const activeU=shopBought.map(id=>{const it=SHOP_ITEMS.find(s=>s.id===id);return it?it.emoji:'';}).join(' ');
+  if(activeU) txt('Activo: '+activeU,GW/2,58,14,'#aaa','center');
   // Close button
   const closeX=GW-64,closeY=8,closeW=56,closeH=46;
   px(closeX,closeY,closeW,closeH,'#8b0000','#ff4444',3);
@@ -1102,7 +1105,7 @@ function drawShop(){
 
   // Bottom hint
   px(0,GH-30,GW,30,'rgba(0,0,0,0.6)');
-  txt('Toca un artículo para comprarlo · Los cambios aplican al próximo juego',GW/2,GH-15,11,'#666','center');
+  txt('Toca un artículo para comprarlo · Los cambios se aplican de inmediato',GW/2,GH-15,11,'#666','center');
 }
 
 function handleShopClick(mx,my){
@@ -1123,6 +1126,13 @@ function handleShopClick(mx,my){
     if(G.money>G.best){G.best=G.money;localStorage.setItem('sch2_best',G.best);}
     playSuccess();
     addFloat('✓ '+item.label+'!',GW/2,GH/2-40,'#51cf66',1.3);
+    // Apply upgrade IMMEDIATELY (no need to restart game)
+    if(item.type==='hat')    G.upgrades.hatColor=item.value;
+    if(item.type==='walk')   G.upgrades.fasterWalk=true;
+    if(item.type==='range')  G.upgrades.biggerRange=true;
+    if(item.type==='double') G.upgrades.doublePoints=true;
+    if(item.type==='time')   G.upgrades.extraTime+=item.value;
+    if(item.type==='life'&&G.lives<5) G.lives++;
   });
 }
 
@@ -1248,6 +1258,7 @@ function initLevel(){
   G.tray=[];
   G.cookFill=0;
   G.secretActive=false;G.secretTimer=0;G.secretBonus=false;
+  secretSpawnedThisLevel=false;
   G.stoves.forEach(s=>{s.state='idle';s.item=null;s.timer=0;s.max=0;s.recipeId=-1;});
   particles=[];floats=[];
 
@@ -1692,24 +1703,38 @@ function resetToMenu(){
 // ═══════════════════════════════════════════════════════════════════
 // SECRET INGREDIENT SPAWNER
 // ═══════════════════════════════════════════════════════════════════
+// Track if secret already spawned this level
+let secretSpawnedThisLevel=false;
+
 function updateSecret(){
+  // Only during collect phase AND not yet cooked (G.collected.length < 5)
   if(G.state!=='collect')return;
+  if(G.collected.length>=5){
+    // Player has all ingredients, hide secret
+    if(G.secretActive){G.secretActive=false;}
+    return;
+  }
   if(G.secretActive){
     G.secretTimer--;
     if(G.secretTimer<=0){G.secretActive=false;}
     return;
   }
-  // Random chance to spawn (~every 15-25s)
-  if(G.ticks>180&&Math.random()<0.0004){
-    // Random position not on shelf, stoves, tables
-    G.secretPos={
-      x:220+Math.random()*360,
-      y:340+Math.random()*200,
-    };
-    G.secretActive=true;
-    G.secretTimer=180; // 3 seconds at 60fps
-    playSecret();
-    addFloat('⭐ ¡INGREDIENTE SECRETO! ⭐',G.secretPos.x,G.secretPos.y-40,'#ffd700',1.3);
+  if(secretSpawnedThisLevel)return; // only once per level
+  // 20% chance per level, checked once after 3 seconds in
+  if(G.ticks===200){
+    if(Math.random()<0.20){
+      G.secretPos={
+        x:260+Math.random()*300,
+        y:340+Math.random()*180,
+      };
+      G.secretActive=true;
+      G.secretTimer=120; // exactly 2 seconds at 60fps
+      secretSpawnedThisLevel=true;
+      playSecret();
+      addFloat('⭐ INGREDIENTE SECRETO ⭐',G.secretPos.x,G.secretPos.y-40,'#ffd700',1.3);
+    } else {
+      secretSpawnedThisLevel=true; // didn't spawn, won't try again
+    }
   }
 }
 
@@ -1832,7 +1857,8 @@ function update(){
     }
   });
 
-  // Patience timers for waiting clients
+  // Patience timers for waiting clients — PAUSED while shop is open
+  if(G.shopOpen)return;
   G.clients.forEach((cl,ci)=>{
     if(cl.status==='arriving')return;
     if(cl.status!=='waiting')return;
@@ -1953,6 +1979,14 @@ C.addEventListener('pointerdown',e=>{
     C.setPointerCapture(e.pointerId);
     // Tap (not drag) handled on pointerup
     return;
+  }
+
+  // In-game HUD shop button
+  if(G.state==='collect'||G.state==='deliver'||G.state==='prep'){
+    const hs=drawHUD._shopRect;
+    if(hs&&mx>=hs.x&&mx<=hs.x+hs.w&&my>=hs.y&&my<=hs.y+hs.h){
+      G.shopOpen=true;shopScrollY=0;return;
+    }
   }
 
   if(G.state==='menu'){
