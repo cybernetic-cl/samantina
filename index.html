@@ -3,41 +3,119 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Samantina Chef</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#1a0800;touch-action:none;user-select:none;-webkit-text-size-adjust:none}
-#c{display:block;position:absolute;top:0;left:0;image-rendering:pixelated;cursor:none;touch-action:none}
-/* Mobile control overlay — hidden on menu/shop */
-#mobileUI{position:fixed;bottom:0;left:0;width:100%;pointer-events:none;z-index:30;padding-bottom:env(safe-area-inset-bottom)}
-#mobileUI.hidden{display:none}
-#dpad{position:absolute;bottom:10px;left:10px;width:150px;height:150px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px;pointer-events:all}
-.dp{background:rgba(0,0,0,0.45);border:2px solid rgba(255,255,255,0.25);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;pointer-events:all;-webkit-tap-highlight-color:transparent;transition:background 0.08s}
-.dp:active,.dp.pressed{background:rgba(255,200,80,0.35)}
-#btnArea{position:absolute;bottom:10px;right:10px;display:flex;gap:12px;align-items:flex-end;pointer-events:all}
-.gBtn{width:80px;height:80px;border-radius:50%;border:3px solid rgba(255,255,255,0.5);font-size:14px;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:'Courier New',monospace;box-shadow:0 4px 12px rgba(0,0,0,0.5);transition:transform 0.08s}
-.gBtn:active{transform:scale(0.88)}
-#btnDrop{background:linear-gradient(135deg,#495057,#868e96);color:#fff;width:64px;height:64px}
-#btnGrab{background:linear-gradient(135deg,#e67e22,#f39c12);color:#fff}
-#btnCook{background:linear-gradient(135deg,#1971c2,#4dabf7);color:#fff}
-#btnSound{position:fixed;top:max(10px,env(safe-area-inset-top));left:10px;width:46px;height:46px;border-radius:50%;background:rgba(0,0,0,0.6);border:2px solid rgba(255,255,255,0.3);font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:40;pointer-events:all}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{
+  width:100%;height:100%;
+  overflow:hidden;
+  background:#1a0800;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-text-size-adjust:none;
+  position:fixed;
+}
+#c{
+  display:block;
+  position:absolute;
+  top:0;left:0;
+  image-rendering:pixelated;
+  image-rendering:crisp-edges;
+  cursor:none;
+  touch-action:none;
+}
+/* Controls sit in a fixed bar at the bottom */
+#ctrl{
+  position:fixed;
+  bottom:0;left:0;
+  width:100%;
+  height:200px;
+  background:rgba(10,5,0,0.92);
+  border-top:3px solid #f59f00;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 16px;
+  padding-bottom:env(safe-area-inset-bottom);
+  z-index:50;
+  pointer-events:all;
+}
+#ctrl.hidden{display:none}
+/* D-pad */
+#dpad{
+  display:grid;
+  grid-template-columns:repeat(3,56px);
+  grid-template-rows:repeat(3,56px);
+  gap:4px;
+  flex-shrink:0;
+}
+.dp{
+  background:rgba(255,255,255,0.1);
+  border:2px solid rgba(255,255,255,0.2);
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;
+  cursor:pointer;
+  pointer-events:all;
+  transition:background 0.07s,transform 0.07s;
+  color:#fff;
+}
+.dp:active,.dp.on{background:rgba(255,200,60,0.45);transform:scale(0.92)}
+/* Action buttons */
+#btns{display:flex;gap:10px;align-items:center;flex-shrink:0}
+.gb{
+  border-radius:50%;
+  border:3px solid rgba(255,255,255,0.35);
+  font-weight:900;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;
+  font-family:'Courier New',monospace;
+  box-shadow:0 4px 16px rgba(0,0,0,0.6);
+  transition:transform 0.07s,box-shadow 0.07s;
+  line-height:1.2;
+  pointer-events:all;
+}
+.gb:active{transform:scale(0.88);box-shadow:0 2px 6px rgba(0,0,0,0.5)}
+#bDrop{width:60px;height:60px;font-size:12px;background:linear-gradient(135deg,#495057,#868e96);color:#fff}
+#bCook{width:82px;height:82px;font-size:22px;background:linear-gradient(135deg,#1864ab,#4dabf7);color:#fff}
+#bGrab{width:82px;height:82px;font-size:22px;background:linear-gradient(135deg,#c05400,#ff922b);color:#fff}
+/* Sound button */
+#bSound{
+  position:fixed;top:max(8px,env(safe-area-inset-top));left:10px;
+  width:44px;height:44px;border-radius:50%;
+  background:rgba(0,0,0,0.65);border:2px solid rgba(255,255,255,0.3);
+  font-size:22px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:60;pointer-events:all;
+}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="mobileUI">
+
+<!-- BOTTOM CONTROL BAR -->
+<div id="ctrl" class="hidden">
   <div id="dpad">
-    <div></div><div class="dp" id="dpUp">▲</div><div></div>
-    <div class="dp" id="dpLeft">◀</div><div></div><div class="dp" id="dpRight">▶</div>
-    <div></div><div class="dp" id="dpDown">▼</div><div></div>
+    <div></div>
+    <div class="dp" id="dpUp">▲</div>
+    <div></div>
+    <div class="dp" id="dpLeft">◀</div>
+    <div></div>
+    <div class="dp" id="dpRight">▶</div>
+    <div></div>
+    <div class="dp" id="dpDown">▼</div>
+    <div></div>
   </div>
-  <div id="btnArea">
-    <div class="gBtn" id="btnDrop" style="background:linear-gradient(135deg,#868e96,#adb5bd);color:#111;width:58px;height:58px;font-size:11px">🗑️<span style="font-size:8px">SOLTAR</span></div>
-    <div class="gBtn" id="btnCook">🍳<span style="font-size:9px">COCINAR</span></div>
-    <div class="gBtn" id="btnGrab">✋<span style="font-size:9px">AGARRAR</span></div>
+  <div id="btns">
+    <div class="gb" id="bDrop">🗑<span style="font-size:9px;display:block">SOLTAR</span></div>
+    <div class="gb" id="bCook">🍳<span style="font-size:10px;display:block">COCINAR</span></div>
+    <div class="gb" id="bGrab">✋<span style="font-size:10px;display:block">AGARRAR</span></div>
   </div>
 </div>
-<div id="btnSound">🔊</div>
+<div id="bSound">🔊</div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
@@ -47,20 +125,35 @@ const C=document.getElementById('c');
 const ctx=C.getContext('2d');
 ctx.imageSmoothingEnabled=false;
 const GW=960,GH=640;
-let scX=1,scY=1,canvasScale=1;
+let canvasScale=1,canvasOffX=0,canvasOffY=0;
+const CTRL_H=200; // height of bottom control bar in CSS px
+
 function resize(){
   const vw=window.innerWidth,vh=window.innerHeight;
-  // Fill width on portrait phone, letterbox on landscape/desktop
-  const scW=vw/GW, scH=vh/GH;
+  const ctrl=document.getElementById('ctrl');
+  const ctrlVisible=ctrl&&!ctrl.classList.contains('hidden');
+  // Available height for canvas
+  const availH=ctrlVisible?vh-CTRL_H:vh;
+  // Scale to fill width OR available height, whichever fits
+  const scW=vw/GW, scH=availH/GH;
   canvasScale=Math.min(scW,scH);
+  const cw=GW*canvasScale, ch=GH*canvasScale;
   C.width=GW; C.height=GH;
-  C.style.width=(GW*canvasScale)+'px';
-  C.style.height=(GH*canvasScale)+'px';
-  C.style.left=((vw-GW*canvasScale)/2)+'px';
-  C.style.top=((vh-GH*canvasScale)/2)+'px';
-  scX=canvasScale; scY=canvasScale;
+  C.style.width=cw+'px';
+  C.style.height=ch+'px';
+  canvasOffX=(vw-cw)/2; canvasOffY=(availH-ch)/2;
+  C.style.left=canvasOffX+'px';
+  C.style.top=canvasOffY+'px';
 }
-window.addEventListener('resize',resize); resize();
+window.addEventListener('resize',resize);
+// Resize when ctrl bar shows/hides
+function setCtrl(show){
+  const ctrl=document.getElementById('ctrl');
+  if(!ctrl)return;
+  ctrl.classList.toggle('hidden',!show);
+  resize();
+}
+resize();
 
 // ═══════════════════════════════════════════════════════════════════
 // AUDIO
@@ -106,9 +199,9 @@ function startBGMusic(mode){
 }
 function stopBGMusic(){if(bgMusicTimer){clearInterval(bgMusicTimer);bgMusicTimer=null;}}
 
-document.getElementById('btnSound').onclick=()=>{
+document.getElementById('bSound').onclick=()=>{
   muted=!muted;
-  document.getElementById('btnSound').textContent=muted?'🔇':'🔊';
+  document.getElementById('bSound').textContent=muted?'🔇':'🔊';
   if(muted)stopBGMusic(); else if(G.state==='collect')startBGMusic('collect');
 };
 
@@ -463,7 +556,7 @@ function drawKitchen(){
 
   // Delivery zone highlight
   if(G.state==='deliver'&&G.holding&&G.holding.type==='plate'){
-    const c=G.clients[G.currentClient];
+    const c=G.clients.find(cl=>cl.status==='waiting');
     if(c){
       const t=TABLES[c.tableIdx];
       ctx.save();
@@ -647,7 +740,7 @@ function drawCustomers(){
       const bx=cx-bw/2;
       // Place bubble above head (head top ≈ cy-32)
       const by=cy-44-bh;
-      const isActive=(ci===G.currentClient);
+      const isActive=cl.status==='waiting'&&G.clients.find(c=>c.status==='waiting')===cl;
       // shadow
       px(bx+3,by+3,bw,bh,'rgba(0,0,0,0.25)');
       px(bx,by,bw,bh,'#fffde7',isActive?'#f59f00':'#c49040',isActive?4:2);
@@ -896,7 +989,7 @@ function drawIngredientPanel(){
   if(!cur)return;
 
   // Panel bottom-center above mobile buttons
-  const pw=440,ph=92,panx=(GW-pw)/2,pany=GH-ph-16;
+  const pw=440,ph=92,panx=(GW-pw)/2,pany=GH-ph-8;
   px(panx,pany,pw,ph,'rgba(20,10,0,0.88)','#f59f00',3);
 
   // Title row
@@ -1141,7 +1234,7 @@ function handleShopClick(mx,my){
     if(item.type==='range')  G.upgrades.biggerRange=true;
     if(item.type==='double') G.upgrades.doublePoints=true;
     if(item.type==='time')   G.upgrades.extraTime+=item.value;
-    if(item.type==='life'&&G.lives<5) G.lives++;
+    if(item.type==='life'&&G.stars<3) G.stars=Math.min(3,G.stars+1);
   });
 }
 
@@ -1572,23 +1665,22 @@ function pressTiming(){
 
   if(quality==='burned'){
     playBurn();
-    G.lives--;
+    G.stars--;
     Sam.face='burn';Sam.faceTimer=90;
     const burnClient=G.clients.find(c=>c.status==='waiting');
     if(burnClient){
       burnClient.reaction='burn';burnClient.stars=0;burnClient.status='eating';
       spawnParticles(TABLES[burnClient.tableIdx].x+55,TABLES[burnClient.tableIdx].y,['#333','#444','#888'],18);
-      G.clientsServed++;
+      G.totalServed++;
       setTimeout(()=>{
-        burnClient.status='done';
-        const nextIdx=G.clients.findIndex(c=>c.status==='waiting');
-        if(nextIdx>=0){G.currentClient=nextIdx;buildShelf();}
-        else levelComplete();
+        burnClient.status='leaving';burnClient.departureT=0;
+        const next=G.clients.find(c=>c.status==='waiting');
+        if(next) buildShelf();
       },2200);
     }
     screenShake=14;
     G.stoves[G.cookStoveIdx].state='idle';
-    addFloat('🔥 QUEMADO! -❤',Sam.x+Sam.w/2,Sam.y,'#ff4444',1.3);
+    addFloat('🔥 QUEMADO! -⭐',Sam.x+Sam.w/2,Sam.y,'#ff4444',1.3);
     G.state='collect';
     stopBGMusic();startBGMusic('collect');
     checkGameOver();
@@ -1708,7 +1800,7 @@ function checkGameOver(){
 }
 
 function startGame(){
-  G.xp=0;G.score=0;G.money=0;G.stars=3;G.rankIdx=0;G.totalServed=0;
+  G.xp=1200;G.score=0;G.money=500;G.stars=3;G.rankIdx=6;G.totalServed=0;
   // Apply upgrades from shop
   G.upgrades.hatColor=shopBought.includes('hatGold')?'gold':shopBought.includes('hatBlue')?'blue':shopBought.includes('hatPink')?'pink':'white';
   G.upgrades.extraTime=(shopBought.includes('time2')?10:0)+(shopBought.includes('time1')?5:0);
@@ -1914,19 +2006,19 @@ function update(){
     if(cl.patienceTimer===~~(cl.patienceMax*0.75))playTick();
     if(cl.patienceTimer===~~(cl.patienceMax*0.9))playTick();
     if(cl.patienceTimer>=cl.patienceMax){
-      // Client leaves angry
-      cl.status='done';cl.reaction='bad';
-      G.lives--;screenShake=10;
+      // Client leaves angry — lose a star
+      cl.status='leaving';cl.departureT=0;cl.reaction='bad';
+      G.stars--;
+      screenShake=10;
       playFail();
-      addFloat('😤 Se fue sin comer! -❤',TABLES[cl.tableIdx].x+55,TABLES[cl.tableIdx].y,'#ff6b6b',1.2);
+      addFloat('😤 Se fue! -⭐',TABLES[cl.tableIdx].x+55,TABLES[cl.tableIdx].y,'#ff6b6b',1.2);
       Sam.face='bad';Sam.faceTimer=80;
-      // If this was current client, advance
-      if(ci===G.currentClient){
-        const nextIdx=G.clients.findIndex(c=>c.status==='waiting');
-        if(nextIdx>=0){G.currentClient=nextIdx;buildShelf();}
-        else levelComplete();
-      }
       checkGameOver();
+      setTimeout(()=>{
+        cl.status='done';
+        const next=G.clients.find(c=>c.status==='waiting');
+        if(next) buildShelf();
+      },2000);
     }
   });
 
@@ -1966,13 +2058,15 @@ function draw(){
 // ═══════════════════════════════════════════════════════════════════
 // LOOP
 // ═══════════════════════════════════════════════════════════════════
+let _lastCtrlState=null;
 function loop(){
   update();draw();
-  // Show/hide mobile controls based on game state
-  const ui=document.getElementById('mobileUI');
-  if(ui){
-    const inGame=G.state==='collect'||G.state==='deliver'||G.state==='prep'||G.state==='cooking';
-    ui.classList.toggle('hidden',!inGame||G.shopOpen);
+  // Show/hide control bar
+  const inGame=G.state==='collect'||G.state==='deliver'||G.state==='prep'||G.state==='cooking';
+  const showCtrl=inGame&&!G.shopOpen;
+  if(showCtrl!==_lastCtrlState){
+    _lastCtrlState=showCtrl;
+    setCtrl(showCtrl);
   }
   requestAnimationFrame(loop);
 }
@@ -2005,17 +2099,16 @@ document.addEventListener('keyup',e=>{keys[e.key]=false;});
   el.addEventListener('pointerleave',off);
 });
 
-document.getElementById('btnGrab').addEventListener('pointerdown',e=>{e.preventDefault();doGrab();});
-document.getElementById('btnCook').addEventListener('pointerdown',e=>{e.preventDefault();doCook();});
-document.getElementById('btnDrop').addEventListener('pointerdown',e=>{e.preventDefault();dropLastIngredient();});
+document.getElementById('bGrab').addEventListener('pointerdown',e=>{e.preventDefault();doGrab();});
+document.getElementById('bCook').addEventListener('pointerdown',e=>{e.preventDefault();doCook();});
+document.getElementById('bDrop').addEventListener('pointerdown',e=>{e.preventDefault();dropLastIngredient();});
 
 // Canvas tap for menu/gameover/victory/shop
 let shopScrollStart=0,shopScrollYStart=0,shopDragging=false;
 
 C.addEventListener('pointerdown',e=>{
-  const rect=C.getBoundingClientRect();
-  const mx=(e.clientX-rect.left)*(GW/rect.width);
-  const my=(e.clientY-rect.top)*(GH/rect.height);
+  const mx=(e.clientX-canvasOffX)/canvasScale;
+  const my=(e.clientY-canvasOffY)/canvasScale;
 
   if(G.shopOpen){
     shopScrollStart=e.clientY;
