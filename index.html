@@ -795,6 +795,32 @@ function drawCustomers(){
       txt(cl.recipe.name,bx+70,by+14,11,'#5c2e00','center',true);
       // ingredient icons row
       cl.recipe.need.slice(0,5).forEach((ic,ni)=>em(ic,bx+42+ni*20,by+38,14));
+
+      // ───────────── PANTALLITA DE ESTADO DEL CLIENTE ─────────────
+      if(cl.status==='waiting'){
+        const timeFrac=1-(cl.patienceTimer/cl.patienceMax); // 1 = mucho tiempo, 0 = se acaba
+        const panelX=bx+bw+8;
+        const panelY=by+5;
+        const panelW=78;
+        const panelH=46;
+        const barColor=timeFrac>0.6?'#51cf66':timeFrac>0.3?'#fcc419':'#ff6b6b';
+        const secondsLeft=Math.max(0,Math.ceil((cl.patienceMax-cl.patienceTimer)/60));
+        let mood='🙂', label='OK';
+        if(timeFrac<0.25){mood='😡';label='RÁPIDO';}
+        else if(timeFrac<0.55){mood='😐';label='ESPERA';}
+        px(panelX+2,panelY+2,panelW,panelH,'rgba(0,0,0,0.25)');
+        px(panelX,panelY,panelW,panelH,'rgba(20,10,0,0.86)',timeFrac<0.25?'#ff4444':'#f59f00',2);
+        em(mood,panelX+14,panelY+15,16);
+        txt(secondsLeft+'s',panelX+46,panelY+14,13,'#fff','center',true);
+        txt(label,panelX+panelW/2,panelY+29,8,barColor,'center');
+        px(panelX+6,panelY+36,panelW-12,6,'rgba(255,255,255,0.18)');
+        px(panelX+6,panelY+36,(panelW-12)*Math.max(0,timeFrac),6,barColor);
+        if(timeFrac<0.18){
+          ctx.save();ctx.globalAlpha=0.28+Math.sin(G.ticks*0.3)*0.22;
+          px(panelX,panelY,panelW,panelH,'rgba(255,0,0,0.35)');
+          ctx.restore();
+        }
+      }
     }
 
     // PATIENCE BAR
@@ -1038,13 +1064,13 @@ function drawIngredientPanel(){
   px(panx,pany,pw,ph,'rgba(20,10,0,0.88)','#f59f00',3);
 
   // Title row
-  txt('INGREDIENTES  ('+G.collected.length+'/5)',panx+pw/2,pany+16,13,'#ffd700','center');
+  txt('INGREDIENTES  ('+collectedCount()+'/5)',panx+pw/2,pany+16,13,'#ffd700','center');
 
   // 5 slots — fixed 72px each, no ghost hints
   for(let i=0;i<5;i++){
     const sx=panx+8+i*82,sy=pany+26;
     const filled=!!G.collected[i];
-    const correct=filled&&cur.recipe.need.includes(G.collected[i]);
+    const correct=filled&&G.collected[i]===cur.recipe.need[i];
     const slotBg=filled?(correct?'rgba(81,207,102,0.35)':'rgba(255,107,107,0.35)'):'rgba(255,255,255,0.08)';
     px(sx,sy,68,48,slotBg,'rgba(255,255,255,0.2)',2);
     if(filled){
@@ -1056,7 +1082,7 @@ function drawIngredientPanel(){
   }
 
   // Drop last ingredient hint
-  if(G.collected.length>0){
+  if(collectedCount()>0){
     txt('X = soltar ultimo',panx+pw-8,pany+ph-10,11,'#ff9999','right');
   }
 }
@@ -1353,11 +1379,23 @@ function drawMenu(){
   txt('Dinero: $'+G.money,GW/2,shopY+40,13,hasUpgrades?'#51cf66':'#aaa','center');
   drawMenu._shopRect={x:px2+20,y:shopY,w:pw-40,h:50};
 
+  // ── TEST SCENE BUTTONS ───────────────────────────────────────
+  // Estos botones son accesos rápidos para revisar las escenas finales
+  // desde el inicio sin jugar toda la partida.
+  const testY=py2+438;
+  const testW=(pw-52)/2;
+  px(px2+20,testY,testW,46,'#184c2b','#51cf66',3);
+  txt('🏆 VICTORIA',px2+20+testW/2,testY+23,15,'#fff','center',true);
+  drawMenu._victoryRect={x:px2+20,y:testY,w:testW,h:46};
+
+  px(px2+32+testW,testY,testW,46,'#5c0000','#ff4444',3);
+  txt('💔 GAME OVER',px2+32+testW+testW/2,testY+23,15,'#fff','center',true);
+  drawMenu._gameOverRect={x:px2+32+testW,y:testY,w:testW,h:46};
+
   // ── CONTROLS MINI ────────────────────────────────────────────
-  const ctrlY=py2+442;
-  px(px2+16,ctrlY,pw-32,48,'rgba(0,0,0,0.12)');
-  txt('D-pad: mover   ✋: agarrar   🍳: cocinar',GW/2,ctrlY+14,11,'#7a4000','center');
-  txt('Toca la pantalla para comenzar',GW/2,ctrlY+34,11,'#a06030','center');
+  const ctrlY=py2+494;
+  px(px2+16,ctrlY,pw-32,22,'rgba(0,0,0,0.12)');
+  txt('D-pad: mover   ✋: agarrar   🍳: cocinar',GW/2,ctrlY+11,10,'#7a4000','center');
 
   // Bottom decorative stripe
   px(px2,py2+ph-14,pw,8,'#e67e22');
@@ -1433,6 +1471,36 @@ function patienceForRank(){
 }
 
 
+
+function clearCollected(){
+  G.collected=[null,null,null,null,null];
+}
+function collectedCount(){
+  return G.collected.filter(Boolean).length;
+}
+function collectedFull(){
+  return collectedCount()>=5;
+}
+function addIngredient(icon){
+  const cur=G.clients.find(c=>c.status==='waiting');
+  if(!cur)return false;
+  const recipe=cur.recipe.need;
+  const correctIndex=recipe.indexOf(icon);
+  // Si corresponde al pedido, marcarlo exactamente en su posición real.
+  if(correctIndex!==-1 && !G.collected[correctIndex]){
+    G.collected[correctIndex]=icon;
+    return true;
+  }
+  // Si es incorrecto o repetido, usar el primer espacio libre para que el jugador lo vea en rojo.
+  for(let i=0;i<5;i++){
+    if(!G.collected[i]){
+      G.collected[i]=icon;
+      return true;
+    }
+  }
+  return false;
+}
+
 function forceLevelOneStart(){
   // Limpia cualquier estado viejo de prueba y asegura nivel 1.
   G.xp=0;
@@ -1442,7 +1510,7 @@ function forceLevelOneStart(){
   G.stars=G.upgrades.extraLife?4:3;
   G.secretBonus=false;
   G.secretActive=false;
-  G.collected=[];
+  clearCollected();
   G.holding=null;
   G.tray=[];
   G.clients=[];
@@ -1479,7 +1547,7 @@ function spawnClientIntoQueue(){
 
 function initGame(){
   G.ticks=0;
-  G.collected=[];
+  clearCollected();
   G.holding=null;
   G.tray=[];
   G.cookFill=0;
@@ -1606,13 +1674,17 @@ function doGrab(){
     for(let i=0;i<shelfItems.length;i++){
       const it=shelfItems[i];
       if(i!==pIdx)continue;
-      if(G.collected.length>=5){
+      if(collectedFull()){
         addFloat('¡Máx 5 ingredientes!',Sam.x+17,Sam.y,'#ff6b6b');
         beep(200,0.08,'sawtooth',0.03);
         return;
       }
       it.taken=true;
-      G.collected.push(it.icon);
+      if(!addIngredient(it.icon)){
+        addFloat('¡Máx 5 ingredientes!',Sam.x+17,Sam.y,'#ff6b6b');
+        beep(200,0.08,'sawtooth',0.03);
+        return;
+      }
       G.holding={type:'ing',icon:it.icon};
       playPickup();
       addFloat(it.icon,Sam.x+Sam.w,Sam.y,'#fff',1.2);
@@ -1640,11 +1712,17 @@ function doGrab(){
 
 function dropLastIngredient(){
   if(G.state!=='collect')return;
-  if(G.collected.length===0){
+  if(collectedCount()===0){
     addFloat('No hay ingredientes',Sam.x+17,Sam.y,'#ff9999');
     return;
   }
-  const dropped=G.collected.pop();
+  let dropIdx=-1;
+  for(let i=4;i>=0;i--){
+    if(G.collected[i]){dropIdx=i;break;}
+  }
+  if(dropIdx<0)return;
+  const dropped=G.collected[dropIdx];
+  G.collected[dropIdx]=null;
   G.holding=null;
   // Restore the shelf item so it can be picked again
   for(let i=shelfItems.length-1;i>=0;i--){
@@ -1669,7 +1747,7 @@ function doCook(){
 
   if(G.state==='collect'){
     // Need 5 ingredients collected
-    if(G.collected.length<5){
+    if(collectedCount()<5){
       addFloat('¡Necesitas 5 ingredientes!',Sam.x+17,Sam.y,'#ff6b6b');
       beep(200,0.07,'square',0.02);
       return;
@@ -1700,8 +1778,8 @@ function doCook(){
     G.prep.panY=panY;
     G.prep.ingIdx=0;
     G.prep.targetStove=nearStove;
-    G.prep.correctIngredients=[...G.collected];
-    G.collected=[]; // clear so they don't double-validate later
+    G.prep.correctIngredients=G.collected.filter(Boolean);
+    clearCollected(); // clear so they don't double-validate later
     G.state='prep';
     Sam.face='normal';
     stopBGMusic();
@@ -1721,7 +1799,7 @@ function resetAfterBurn(msg,x,y){
   screenShake=10;
   Sam.face='burn';
   Sam.faceTimer=90;
-  G.collected=[];
+  clearCollected();
   G.holding=null;
   G.cookFill=0;
   if(G.cookStoveIdx>=0){
@@ -1748,7 +1826,7 @@ function pressTiming(){
 
   const cur=G.clients.find(c=>c.status==='waiting');
   // Use the ingredients from prep (what was actually cooked)
-  const cookedWith=G.prep.correctIngredients.length>0 ? G.prep.correctIngredients : G.collected;
+  const cookedWith=G.prep.correctIngredients.length>0 ? G.prep.correctIngredients : G.collected.filter(Boolean);
   const need=cur.recipe.need;
   // Each of the 5 needed ingredients must appear at least once in cookedWith
   const allCorrect=need.every(ic=>cookedWith.includes(ic));
@@ -1758,7 +1836,7 @@ function pressTiming(){
   // Finish cooking
   G.stoves[G.cookStoveIdx].state='idle';
   G.stoves[G.cookStoveIdx].item=null;
-  G.collected=[];
+  clearCollected();
   G.holding=null;
 
   const plate={
@@ -1916,7 +1994,7 @@ let secretSpawnedThisLevel=false;
 function updateSecret(){
   // Only during collect phase AND not yet cooked (G.collected.length < 5)
   if(G.state!=='collect')return;
-  if(G.collected.length>=5){
+  if(collectedFull()){
     // Player has all ingredients, hide secret
     if(G.secretActive){G.secretActive=false;}
     return;
@@ -2167,12 +2245,19 @@ function drawMobileIngredientPanel(){
   pxM(x+3,y+3,pw,ph,'rgba(0,0,0,0.25)');
   pxM(x,y,pw,ph,'rgba(20,10,0,0.92)','#f59f00',3);
   txtM('PEDIDO: '+cur.recipe.dish+' '+cur.recipe.name,x+16,y+18,14,'#ffd700','left',true);
-  txtM('Juntados '+G.collected.length+'/5',x+pw-16,y+18,12,'#fff','right',true);
+  const timeFrac=1-(cur.patienceTimer/cur.patienceMax);
+  const secondsLeft=Math.max(0,Math.ceil((cur.patienceMax-cur.patienceTimer)/60));
+  const barColor=timeFrac>0.6?'#51cf66':timeFrac>0.3?'#fcc419':'#ff6b6b';
+  const mood=timeFrac<0.25?'😡':timeFrac<0.55?'😐':'🙂';
+  txtM(mood+' '+secondsLeft+'s',x+pw-150,y+18,12,barColor,'center',true);
+  pxM(x+pw-205,y+28,110,6,'rgba(255,255,255,0.16)');
+  pxM(x+pw-205,y+28,110*Math.max(0,timeFrac),6,barColor);
+  txtM('Juntados '+collectedCount()+'/5',x+pw-16,y+18,12,'#fff','right',true);
   const slotW=(pw-32)/5;
   for(let i=0;i<5;i++){
     const sx=x+16+i*slotW, sy=y+34;
     const filled=!!G.collected[i];
-    const correct=filled&&cur.recipe.need.includes(G.collected[i]);
+    const correct=filled&&G.collected[i]===cur.recipe.need[i];
     const bg=filled?(correct?'rgba(81,207,102,0.35)':'rgba(255,107,107,0.35)'):'rgba(255,255,255,0.08)';
     pxM(sx,sy,slotW-8,42,bg,'rgba(255,255,255,0.18)',2);
     if(filled)emM(G.collected[i],sx+(slotW-8)/2,sy+21,25);
@@ -2320,6 +2405,30 @@ C.addEventListener('pointerdown',e=>{
     if(sr&&mx>=sr.x&&mx<=sr.x+sr.w&&my>=sr.y&&my<=sr.y+sr.h){
       G.shopOpen=true;shopScrollY=0;return;
     }
+
+    // Botones de prueba de escenas finales
+    const vr=drawMenu._victoryRect;
+    if(vr&&mx>=vr.x&&mx<=vr.x+vr.w&&my>=vr.y&&my<=vr.y+vr.h){
+      G.xp=XP_VICTORY;
+      G.score=Math.max(G.score,999);
+      G.money=Math.max(G.money,250);
+      G.totalServed=Math.max(G.totalServed,12);
+      G.state='victory';
+      setCtrl(false);
+      playSuccess();
+      return;
+    }
+    const gr=drawMenu._gameOverRect;
+    if(gr&&mx>=gr.x&&mx<=gr.x+gr.w&&my>=gr.y&&my<=gr.y+gr.h){
+      G.stars=0;
+      G.score=Math.max(G.score,120);
+      G.money=Math.max(G.money,25);
+      G.state='gameover';
+      setCtrl(false);
+      playFail();
+      return;
+    }
+
     doGrab();return;
   }
   if(G.state==='gameover'||G.state==='victory'){doGrab();}
