@@ -344,6 +344,7 @@ let G={
   secretTimer:0,
   secretPos:{x:0,y:0},
   secretBonus:false, // next good plate doubles
+  lastSecretMilestone:0, // aparece cada 5 clientes servidos
   // Stoves (3 independent cooking slots)
   stoves:[
     {state:'idle',item:null,timer:0,max:0,recipeId:-1,quality:''},
@@ -862,6 +863,20 @@ function drawSam(){
   if(flip){ctx.scale(-1,1);ctx.translate(-GW,0);}
   const dx=flip?GW-x-Sam.w:x;
 
+  // Brillo de ingrediente secreto: activo solo para el plato actual
+  if(G.secretBonus){
+    const glowPulse=0.55+Math.sin(G.ticks*0.22)*0.22;
+    ctx.save();
+    ctx.globalAlpha=glowPulse;
+    for(let r=0;r<3;r++){circ(dx+Sam.w/2,y+24,34+r*13,'rgba(255,215,0,0.18)');}
+    ctx.globalAlpha=0.9;
+    for(let k=0;k<6;k++){
+      const a=G.ticks*0.08+k*Math.PI/3;
+      em(k%2?'✨':'⭐',dx+Sam.w/2+Math.cos(a)*42,y+18+Math.sin(a)*34,13);
+    }
+    ctx.restore();
+  }
+
   // Shadow
   ctx.globalAlpha=0.2;circ(dx+Sam.w/2,y+Sam.h+3,20,7,'#000');ctx.globalAlpha=1;
 
@@ -982,7 +997,7 @@ function drawHUD(){
   // Estrellas de vida: activas en amarillo, perdidas en gris
   for(let i=0;i<3;i++){
     const starX = 14 + i*24;
-    const starColor = i < Math.max(0,~~G.stars) ? '#ffd700' : '#555';
+    const starColor = i < Math.max(0,Math.floor(G.stars)) ? '#ffd700' : '#555';
     txt('⭐', starX, 26, 20, starColor, 'left');
   }
   // Rank
@@ -1577,6 +1592,16 @@ function currentRankIdx(){
   for(let i=XP_RANKS.length-1;i>=0;i--){if(G.xp>=XP_RANKS[i].xp){idx=i;break;}}
   return idx;
 }
+
+function loseStar(reason,x,y){
+  const before=G.stars;
+  G.stars=Math.max(0, Math.floor(G.stars)-1);
+  if(before!==G.stars){
+    addFloat(reason||'-⭐', x||Sam.x+Sam.w/2, y||Sam.y, '#ff6b6b', 1.2);
+    spawnParticles(x||Sam.x+Sam.w/2, y||Sam.y, ['#555','#777','#999','#ff6b6b'], 14, true);
+  }
+}
+
 function patienceForRank(){
   return (currentRank().patience + G.upgrades.extraTime)*60;
 }
@@ -1621,6 +1646,7 @@ function forceLevelOneStart(){
   G.stars=G.upgrades.extraLife?4:3;
   G.secretBonus=false;
   G.secretActive=false;
+  G.lastSecretMilestone=0;
   clearCollected();
   G.holding=null;
   G.tray=[];
@@ -1664,7 +1690,7 @@ function initGame(){
   G.tray=[];
   G.cookFill=0;
   G.secretActive=false;G.secretTimer=0;G.secretBonus=false;
-  secretSpawnedThisLevel=false;
+  G.lastSecretMilestone=0;
   G.stoves.forEach(s=>{s.state='idle';s.item=null;s.timer=0;s.max=0;});
   particles=[];floats=[];
   G.clients=[];
@@ -1907,7 +1933,8 @@ function doCook(){
 
 function resetAfterBurn(msg,x,y){
   playBurn();
-  G.stars--;
+  loseStar('🔥 -⭐', x||Sam.x+Sam.w/2, y||Sam.y);
+  G.secretBonus=false;
   screenShake=10;
   Sam.face='burn';
   Sam.faceTimer=90;
@@ -1998,13 +2025,13 @@ function tryDeliver(){
 
   if(quality==='burned'){
     reaction='burn';stars=0;earned=0;
-    G.stars--;Sam.face='burn';Sam.faceTimer=80;screenShake=12;
+    loseStar('🔥 -⭐', t.x+t.w/2, t.y-20);G.secretBonus=false;Sam.face='burn';Sam.faceTimer=80;screenShake=12;
     playBurn();
     spawnParticles(t.x+t.w/2,t.y,['#333','#555','#888'],18);
     addFloat('🔥 Quemado! -⭐',t.x+t.w/2,t.y-20,'#ff4444',1.2);
   } else if(!rightRecipe||quality==='bad'){
     reaction='bad';stars=0;earned=0;
-    G.stars--;Sam.face='bad';Sam.faceTimer=80;screenShake=10;
+    loseStar('🤢 -⭐', t.x+t.w/2, t.y-20);G.secretBonus=false;Sam.face='bad';Sam.faceTimer=80;screenShake=10;
     playFail();
     spawnParticles(t.x+t.w/2,t.y,['#333','#555','#999'],15);
     addFloat('🤢 Horrible! -⭐',t.x+t.w/2,t.y-20,'#ff6b6b',1.2);
@@ -2020,12 +2047,18 @@ function tryDeliver(){
     earned=base+pBonus+rankBonus;
     // Max possible: perfect+instant = 40+60+30 = 130 at level 10
     // Typical: ok+half patience = 20+15+level = ~45 at mid game
-    if(G.secretBonus){earned*=2;G.secretBonus=false;addFloat('✨ x2 BONUS! +$'+(earned)+'→$'+(earned),t.x+t.w/2,t.y-50,'#ffd700',1.5);}
+    const secretPlateBonus=G.secretBonus;
+    if(secretPlateBonus){earned*=2;}
     if(G.upgrades.doublePoints&&quality==='perfect'){earned*=2;addFloat('⭐ x2 PERFECTO!',t.x+t.w/2,t.y-64,'#ffd700',1.3);}
     // XP gain: quality + patience bonus
     const xpGain=quality==='perfect'?40:25;
     const xpBonus=~~(patienceFrac*20);
-    G.xp+=xpGain+xpBonus;
+    const totalXpGain=secretPlateBonus ? (xpGain+xpBonus)*2 : (xpGain+xpBonus);
+    G.xp+=totalXpGain;
+    if(secretPlateBonus){
+      addFloat('✨ SECRETO x2: XP +$ x2',t.x+t.w/2,t.y-50,'#ffd700',1.5);
+      G.secretBonus=false;
+    }
     // Rank-up notification
     const newRankIdx=currentRankIdx();
     if(newRankIdx>G.rankIdx){
@@ -2100,40 +2133,40 @@ function resetToMenu(){
 // ═══════════════════════════════════════════════════════════════════
 // SECRET INGREDIENT SPAWNER
 // ═══════════════════════════════════════════════════════════════════
-// Track if secret already spawned this level
-let secretSpawnedThisLevel=false;
+function spawnSecretIngredient(){
+  G.secretPos={
+    x:220+Math.random()*420,
+    y:300+Math.random()*230,
+  };
+  G.secretActive=true;
+  G.secretTimer=180; // 3 segundos a 60fps
+  playSecret();
+  addFloat('⭐ INGREDIENTE SECRETO ⭐',G.secretPos.x,G.secretPos.y-40,'#ffd700',1.3);
+  spawnParticles(G.secretPos.x,G.secretPos.y,['#ffd700','#fff','#ffe066'],18,true);
+}
 
 function updateSecret(){
-  // Only during collect phase AND not yet cooked (G.collected.length < 5)
   if(G.state!=='collect')return;
+
   if(collectedFull()){
-    // Player has all ingredients, hide secret
-    if(G.secretActive){G.secretActive=false;}
+    if(G.secretActive)G.secretActive=false;
     return;
   }
+
   if(G.secretActive){
     G.secretTimer--;
-    if(G.secretTimer<=0){G.secretActive=false;}
+    if(G.secretTimer<=0)G.secretActive=false;
     return;
   }
-  if(secretSpawnedThisLevel)return; // only once per level
-  // 20% chance per level, checked once after 3 seconds in
-  if(G.ticks===200){
-    if(Math.random()<0.20){
-      G.secretPos={
-        x:260+Math.random()*300,
-        y:340+Math.random()*180,
-      };
-      G.secretActive=true;
-      G.secretTimer=120; // exactly 2 seconds at 60fps
-      secretSpawnedThisLevel=true;
-      playSecret();
-      addFloat('⭐ INGREDIENTE SECRETO ⭐',G.secretPos.x,G.secretPos.y-40,'#ffd700',1.3);
-    } else {
-      secretSpawnedThisLevel=true; // didn't spawn, won't try again
-    }
+
+  // Aparece una sola vez cada 5 clientes servidos: 5, 10, 15...
+  const milestone=Math.floor(G.totalServed/5)*5;
+  if(milestone>=5 && milestone!==G.lastSecretMilestone){
+    G.lastSecretMilestone=milestone;
+    spawnSecretIngredient();
   }
 }
+
 
 // ═══════════════════════════════════════════════════════════════════
 // UPDATE
@@ -2291,10 +2324,10 @@ function update(){
     if(cl.patienceTimer>=cl.patienceMax){
       // Client leaves angry — lose a star
       cl.status='leaving';cl.departureT=0;cl.reaction='bad';
-      G.stars--;
+      loseStar('😤 Se fue! -⭐',TABLES[cl.tableIdx].x+55,TABLES[cl.tableIdx].y);
+      G.secretBonus=false;
       screenShake=10;
       playFail();
-      addFloat('😤 Se fue! -⭐',TABLES[cl.tableIdx].x+55,TABLES[cl.tableIdx].y,'#ff6b6b',1.2);
       Sam.face='bad';Sam.faceTimer=80;
       checkGameOver();
       setTimeout(()=>{
@@ -2335,7 +2368,7 @@ function drawMobileHUD(){
 
   // Estrellas amarillas/grises
   for(let i=0;i<3;i++){
-    txtM('⭐',18+i*28,25,24,i<G.stars?'#ffd700':'#555','left',true);
+    txtM('⭐',18+i*28,25,24,i<Math.max(0,Math.floor(G.stars))?'#ffd700':'#555','left',true);
   }
 
   const rank=currentRank();
