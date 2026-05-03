@@ -1301,6 +1301,8 @@ function handleShopClick(mx,my){
 // DRAW MENU
 // ═══════════════════════════════════════════════════════════════════
 function drawMenu(){
+  drawMenu._victoryRect=null;
+  drawMenu._gameOverRect=null;
   // Full gradient background
   const bg=ctx.createLinearGradient(0,0,0,GH);
   bg.addColorStop(0,'#3d1a00');bg.addColorStop(1,'#1a0800');
@@ -1367,21 +1369,8 @@ function drawMenu(){
   txt('Dinero: $'+G.money,GW/2,shopY+40,13,hasUpgrades?'#51cf66':'#aaa','center');
   drawMenu._shopRect={x:px2+20,y:shopY,w:pw-40,h:50};
 
-  // ── TEST SCENE BUTTONS ───────────────────────────────────────
-  // Estos botones son accesos rápidos para revisar las escenas finales
-  // desde el inicio sin jugar toda la partida.
-  const testY=py2+438;
-  const testW=(pw-52)/2;
-  px(px2+20,testY,testW,46,'#184c2b','#51cf66',3);
-  txt('🏆 VICTORIA',px2+20+testW/2,testY+23,15,'#fff','center',true);
-  drawMenu._victoryRect={x:px2+20,y:testY,w:testW,h:46};
-
-  px(px2+32+testW,testY,testW,46,'#5c0000','#ff4444',3);
-  txt('💔 GAME OVER',px2+32+testW+testW/2,testY+23,15,'#fff','center',true);
-  drawMenu._gameOverRect={x:px2+32+testW,y:testY,w:testW,h:46};
-
   // ── CONTROLS MINI ────────────────────────────────────────────
-  const ctrlY=py2+494;
+  const ctrlY=py2+438;
   px(px2+16,ctrlY,pw-32,22,'rgba(0,0,0,0.12)');
   txt('D-pad: mover   ✋: agarrar   🍳: cocinar',GW/2,ctrlY+11,10,'#7a4000','center');
 
@@ -2582,28 +2571,6 @@ C.addEventListener('pointerdown',e=>{
       G.shopOpen=true;shopScrollY=0;return;
     }
 
-    // Botones de prueba de escenas finales
-    const vr=drawMenu._victoryRect;
-    if(vr&&mx>=vr.x&&mx<=vr.x+vr.w&&my>=vr.y&&my<=vr.y+vr.h){
-      G.xp=XP_VICTORY;
-      G.score=Math.max(G.score,999);
-      G.money=Math.max(G.money,250);
-      G.totalServed=Math.max(G.totalServed,12);
-      G.state='victory';
-      setCtrl(false);
-      playSuccess();
-      return;
-    }
-    const gr=drawMenu._gameOverRect;
-    if(gr&&mx>=gr.x&&mx<=gr.x+gr.w&&my>=gr.y&&my<=gr.y+gr.h){
-      G.stars=0;
-      G.score=Math.max(G.score,120);
-      G.money=Math.max(G.money,25);
-      G.state='gameover';
-      setCtrl(false);
-      playFail();
-      return;
-    }
 
     doGrab();return;
   }
