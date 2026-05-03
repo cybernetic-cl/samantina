@@ -28,19 +28,20 @@ html,body{
   cursor:none;
   touch-action:none;
 }
-/* Controls sit in a fixed bar at the bottom */
+/* Controls fixed, compactos y adaptados a pantalla vertical */
 #ctrl{
+  --ctrl-h:clamp(128px,22vh,180px);
   position:fixed;
   bottom:0;left:0;
   width:100%;
-  height:200px;
-  background:rgba(10,5,0,0.92);
+  min-height:var(--ctrl-h);
+  background:linear-gradient(180deg,rgba(20,8,0,0.86),rgba(10,5,0,0.96));
   border-top:3px solid #f59f00;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:0 16px;
-  padding-bottom:env(safe-area-inset-bottom);
+  gap:10px;
+  padding:10px max(12px,env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-right));
   z-index:50;
   pointer-events:all;
 }
@@ -48,8 +49,8 @@ html,body{
 /* D-pad */
 #dpad{
   display:grid;
-  grid-template-columns:repeat(3,56px);
-  grid-template-rows:repeat(3,56px);
+  grid-template-columns:repeat(3,clamp(42px,13vw,56px));
+  grid-template-rows:repeat(3,clamp(42px,13vw,56px));
   gap:4px;
   flex-shrink:0;
 }
@@ -66,7 +67,7 @@ html,body{
 }
 .dp:active,.dp.on{background:rgba(255,200,60,0.45);transform:scale(0.92)}
 /* Action buttons */
-#btns{display:flex;gap:10px;align-items:center;flex-shrink:0}
+#btns{display:flex;gap:clamp(6px,2vw,10px);align-items:center;justify-content:flex-end;flex-shrink:0}
 .gb{
   border-radius:50%;
   border:3px solid rgba(255,255,255,0.35);
@@ -80,9 +81,21 @@ html,body{
   pointer-events:all;
 }
 .gb:active{transform:scale(0.88);box-shadow:0 2px 6px rgba(0,0,0,0.5)}
-#bDrop{width:60px;height:60px;font-size:12px;background:linear-gradient(135deg,#495057,#868e96);color:#fff}
-#bCook{width:82px;height:82px;font-size:22px;background:linear-gradient(135deg,#1864ab,#4dabf7);color:#fff}
-#bGrab{width:82px;height:82px;font-size:22px;background:linear-gradient(135deg,#c05400,#ff922b);color:#fff}
+#bDrop{width:clamp(50px,15vw,60px);height:clamp(50px,15vw,60px);font-size:11px;background:linear-gradient(135deg,#495057,#868e96);color:#fff}
+#bCook,#bGrab{width:clamp(66px,20vw,82px);height:clamp(66px,20vw,82px);font-size:clamp(18px,5vw,22px)}
+#bCook{background:linear-gradient(135deg,#1864ab,#4dabf7);color:#fff}
+#bGrab{background:linear-gradient(135deg,#c05400,#ff922b);color:#fff}
+@media (orientation:portrait){
+  #ctrl{--ctrl-h:clamp(132px,20vh,164px);align-items:center}
+  #dpad{grid-template-columns:repeat(3,clamp(38px,12vw,50px));grid-template-rows:repeat(3,clamp(38px,12vw,50px))}
+  .dp{border-radius:14px;font-size:clamp(18px,5vw,22px)}
+  #btns{gap:6px}
+  .gb span{font-size:8px!important}
+}
+@media (max-width:380px){
+  #ctrl{padding-left:8px;padding-right:8px;gap:6px}
+  #btns{gap:4px}
+}
 /* Sound button */
 #bSound{
   position:fixed;top:max(8px,env(safe-area-inset-top));left:10px;
@@ -126,22 +139,26 @@ const ctx=C.getContext('2d');
 ctx.imageSmoothingEnabled=false;
 const GW=960,GH=640;
 let canvasScale=1,canvasOffX=0,canvasOffY=0;
-const CTRL_H=200; // height of bottom control bar in CSS px
-
+function controlHeight(){
+  const ctrl=document.getElementById('ctrl');
+  if(!ctrl||ctrl.classList.contains('hidden'))return 0;
+  return Math.ceil(ctrl.getBoundingClientRect().height||0);
+}
 function resize(){
   const vw=window.innerWidth,vh=window.innerHeight;
-  const ctrl=document.getElementById('ctrl');
-  const ctrlVisible=ctrl&&!ctrl.classList.contains('hidden');
-  // Available height for canvas
-  const availH=ctrlVisible?vh-CTRL_H:vh;
-  // Scale to fill width OR available height, whichever fits
-  const scW=vw/GW, scH=availH/GH;
-  canvasScale=Math.min(scW,scH);
+  const ctrlH=controlHeight();
+  const availH=Math.max(260,vh-ctrlH);
+  const portrait=vh>vw;
+  // En vertical se prioriza el ancho para que no quede aplastado ni con botones encima.
+  let sc=Math.min(vw/GW,availH/GH);
+  if(portrait) sc=Math.min(vw/GW,availH/GH);
+  canvasScale=sc;
   const cw=GW*canvasScale, ch=GH*canvasScale;
   C.width=GW; C.height=GH;
   C.style.width=cw+'px';
   C.style.height=ch+'px';
-  canvasOffX=(vw-cw)/2; canvasOffY=(availH-ch)/2;
+  canvasOffX=(vw-cw)/2;
+  canvasOffY=Math.max(0,(availH-ch)/2);
   C.style.left=canvasOffX+'px';
   C.style.top=canvasOffY+'px';
 }
@@ -1323,17 +1340,36 @@ function drawMenu(){
 // DRAW GAMEOVER / VICTORY
 // ═══════════════════════════════════════════════════════════════════
 function drawGameOver(){
-  ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,GW,GH);
-  const pw=460,ph=340,px2=(GW-pw)/2,py2=(GH-ph)/2;
+  ctx.fillStyle='rgba(0,0,0,0.84)';ctx.fillRect(0,0,GW,GH);
+  const pw=500,ph=390,px2=(GW-pw)/2,py2=(GH-ph)/2;
   px(px2+5,py2+5,pw,ph,'rgba(0,0,0,0.5)');
   px(px2,py2,pw,ph,'#2d1b0e','#ff4444',5);
-  px(px2,py2,pw,22,'rgba(255,0,0,0.3)');
-  em('💔',GW/2,py2+60,52);
-  txt('GAME OVER',GW/2,py2+110,36,'#ff4444','center',true);
-  txt('Puntaje: '+G.score,GW/2,py2+158,22,'#fff','center');
-  txt('Dinero: $'+G.money,GW/2,py2+190,20,'#ffd700','center');
-  px(px2+30,py2+220,pw-60,50,'#8b0000','#ff4444',3);
-  txt('Toca para continuar',GW/2,py2+245,18,'#fff','center');
+  px(px2,py2,pw,24,'rgba(255,0,0,0.28)');
+  // Samantina llorando, fija pero animada
+  const cx=GW/2, sy=py2+82;
+  const cry=Math.sin(G.ticks*0.18)*2;
+  circ(cx,sy+64,38,'rgba(0,0,0,0.25)');
+  px(cx-22,sy+20,44,52,'#70d06b','#2b9348',2);
+  px(cx-12,sy+23,24,45,'#fff5e6');
+  px(cx-38,sy+32+cry,14,42,'#ffc9a3');
+  px(cx+24,sy+32-cry,14,42,'#ffc9a3');
+  px(cx-16,sy+70,12,24,'#293241');
+  px(cx+4,sy+70,12,24,'#293241');
+  circ(cx,sy,32,'#ffc9a3','#8a4b18',2);
+  ctx.beginPath();ctx.arc(cx,sy-4,36,Math.PI*0.75,Math.PI*2.25);ctx.strokeStyle='#8a4b18';ctx.lineWidth=10;ctx.stroke();
+  circ(cx-16,sy-30,13,'#fff');circ(cx,sy-38,16,'#fff');circ(cx+16,sy-30,13,'#fff');px(cx-22,sy-24,44,12,'#fff','#ddd',1);
+  px(cx-14,sy-8,8,5,'#222');px(cx+6,sy-8,8,5,'#222');
+  ctx.beginPath();ctx.arc(cx,sy+15,13,Math.PI,0);ctx.strokeStyle='#a4161a';ctx.lineWidth=4;ctx.stroke();
+  // lágrimas animadas
+  circ(cx-10,sy+8+Math.abs(cry)*2,4,'#74c0fc');circ(cx+12,sy+10+Math.abs(cry)*2,4,'#74c0fc');
+  px(cx-13,sy+12,5,24+Math.abs(cry)*4,'rgba(116,192,252,0.75)');
+  px(cx+10,sy+14,5,22+Math.abs(cry)*4,'rgba(116,192,252,0.75)');
+  em('💔',cx+62,sy-28,34);
+  txt('GAME OVER',GW/2,py2+190,34,'#ff4444','center',true);
+  txt('Puntaje: '+G.score,GW/2,py2+238,22,'#fff','center');
+  txt('Dinero: $'+G.money,GW/2,py2+270,20,'#ffd700','center');
+  px(px2+36,py2+310,pw-72,52,'#8b0000','#ff4444',3);
+  txt('Toca para continuar',GW/2,py2+336,18,'#fff','center');
 }
 function drawVictory(){
   ctx.fillStyle='rgba(255,240,100,0.2)';ctx.fillRect(0,0,GW,GH);
@@ -1632,6 +1668,30 @@ function doCook(){
   }
 }
 
+
+function resetAfterBurn(msg,x,y){
+  playBurn();
+  G.stars--;
+  screenShake=10;
+  Sam.face='burn';
+  Sam.faceTimer=90;
+  G.collected=[];
+  G.holding=null;
+  G.cookFill=0;
+  if(G.cookStoveIdx>=0){
+    G.stoves[G.cookStoveIdx].state='idle';
+    G.stoves[G.cookStoveIdx].item=null;
+    G.stoves[G.cookStoveIdx].timer=0;
+    G.stoves[G.cookStoveIdx].max=0;
+  }
+  G.prep.correctIngredients=[];
+  buildShelf(); // permite volver a agarrar ingredientes inmediatamente
+  addFloat(msg||'🔥 Quemado! vuelve a cocinar',x||Sam.x+Sam.w/2,y||Sam.y,'#ff4444',1.25);
+  G.state='collect';
+  stopBGMusic();startBGMusic('collect');
+  checkGameOver();
+}
+
 function pressTiming(){
   // Evaluate fill position
   const n=G.cookFill;
@@ -1664,26 +1724,8 @@ function pressTiming(){
   };
 
   if(quality==='burned'){
-    playBurn();
-    G.stars--;
-    Sam.face='burn';Sam.faceTimer=90;
-    const burnClient=G.clients.find(c=>c.status==='waiting');
-    if(burnClient){
-      burnClient.reaction='burn';burnClient.stars=0;burnClient.status='eating';
-      spawnParticles(TABLES[burnClient.tableIdx].x+55,TABLES[burnClient.tableIdx].y,['#333','#444','#888'],18);
-      G.totalServed++;
-      setTimeout(()=>{
-        burnClient.status='leaving';burnClient.departureT=0;
-        const next=G.clients.find(c=>c.status==='waiting');
-        if(next) buildShelf();
-      },2200);
-    }
-    screenShake=14;
-    G.stoves[G.cookStoveIdx].state='idle';
-    addFloat('🔥 QUEMADO! -⭐',Sam.x+Sam.w/2,Sam.y,'#ff4444',1.3);
-    G.state='collect';
-    stopBGMusic();startBGMusic('collect');
-    checkGameOver();
+    // No se entrega al cliente: se limpia la estufa y puedes volver a agarrar ingredientes al instante.
+    resetAfterBurn('🔥 QUEMADO! intenta de nuevo',Sam.x+Sam.w/2,Sam.y);
     return;
   }
 
@@ -1793,6 +1835,7 @@ function checkVictory(){
 
 function checkGameOver(){
   if(G.stars<=0){
+    screenShake=0; // Game Over fijo, sin temblor
     G.state='gameover';
     stopBGMusic();
     playFail();
@@ -1947,15 +1990,7 @@ function update(){
     if(G.cookFill>=1.0){
       G.cookFill=1.0;
       addFloat('🔥 ¡SE QUEMÓ!',GW/2,GH/2,'#ff4444',1.4);
-      G.stoves[G.cookStoveIdx].state='idle';
-      G.stoves[G.cookStoveIdx].item=null;
-      G.stoves[G.cookStoveIdx].timer=0;
-      G.collected=[];G.holding=null;
-      G.stars--;screenShake=16;Sam.face='burn';Sam.faceTimer=90;
-      addFloat('🔥 Quemado! -⭐',GW/2,GH/2-40,'#ff4444',1.3);
-      G.state='collect';
-      stopBGMusic();startBGMusic('collect');
-      playBurn();checkGameOver();
+      resetAfterBurn('🔥 Quemado! vuelve a agarrar ingredientes',GW/2,GH/2-40);
     }
     return;
   }
@@ -2031,7 +2066,7 @@ function update(){
 // ═══════════════════════════════════════════════════════════════════
 function draw(){
   ctx.save();
-  if(screenShake>0){
+  if(screenShake>0 && G.state!=='gameover'){
     ctx.translate((Math.random()-0.5)*screenShake*1.5,(Math.random()-0.5)*screenShake*1.5);
   }
 
