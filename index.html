@@ -807,31 +807,7 @@ function drawCustomers(){
       // ingredient icons row
       cl.recipe.need.slice(0,5).forEach((ic,ni)=>em(ic,bx+42+ni*20,by+38,14));
 
-      // ───────────── PANTALLITA DE ESTADO DEL CLIENTE ─────────────
-      if(cl.status==='waiting'){
-        const timeFrac=1-(cl.patienceTimer/cl.patienceMax); // 1 = mucho tiempo, 0 = se acaba
-        const panelX=bx+bw+8;
-        const panelY=by+5;
-        const panelW=78;
-        const panelH=46;
-        const barColor=timeFrac>0.6?'#51cf66':timeFrac>0.3?'#fcc419':'#ff6b6b';
-        const secondsLeft=Math.max(0,Math.ceil((cl.patienceMax-cl.patienceTimer)/60));
-        let mood='🙂', label='OK';
-        if(timeFrac<0.25){mood='😡';label='RÁPIDO';}
-        else if(timeFrac<0.55){mood='😐';label='ESPERA';}
-        px(panelX+2,panelY+2,panelW,panelH,'rgba(0,0,0,0.25)');
-        px(panelX,panelY,panelW,panelH,'rgba(20,10,0,0.86)',timeFrac<0.25?'#ff4444':'#f59f00',2);
-        em(mood,panelX+14,panelY+15,16);
-        txt(secondsLeft+'s',panelX+46,panelY+14,13,'#fff','center',true);
-        txt(label,panelX+panelW/2,panelY+29,8,barColor,'center');
-        px(panelX+6,panelY+36,panelW-12,6,'rgba(255,255,255,0.18)');
-        px(panelX+6,panelY+36,(panelW-12)*Math.max(0,timeFrac),6,barColor);
-        if(timeFrac<0.18){
-          ctx.save();ctx.globalAlpha=0.28+Math.sin(G.ticks*0.3)*0.22;
-          px(panelX,panelY,panelW,panelH,'rgba(255,0,0,0.35)');
-          ctx.restore();
-        }
-      }
+
     }
 
     // PATIENCE BAR
@@ -1462,6 +1438,140 @@ function drawVictory(){
   em('🏆',GW/2,py2+280,52);
   px(px2+40,py2+320,pw-80,50,'#f59f00','#5c2e00',4);
   txt('Toca para jugar de nuevo',GW/2,py2+345,16,'#3a1000','center');
+}
+
+
+// Escenas finales optimizadas para teléfono vertical (pantalla, no mundo)
+function drawSamantinaMini(cx, cy, mode){
+  const happy = mode==='happy';
+  const cry = mode==='cry';
+  const jump = happy ? Math.abs(Math.sin(G.ticks*0.12))*18 : 0;
+  const bob = cry ? Math.sin(G.ticks*0.18)*2 : 0;
+  const y = cy - jump;
+
+  ctx.save();
+  ctx.globalAlpha=0.22;
+  circ(cx,cy+74,42,7,'#000');
+  ctx.globalAlpha=1;
+
+  // legs
+  px(cx-20,y+48,13,28,'#293241');
+  px(cx+7,y+48,13,28,'#293241');
+  px(cx-23,y+75,19,7,'#111');
+  px(cx+4,y+75,19,7,'#111');
+
+  // body / apron
+  px(cx-31,y+12,62,44,'#70d06b','#2b9348',2);
+  px(cx-16,y+14,32,41,'#fff5e6');
+  px(cx-26,y+40,52,8,'#2b9348');
+
+  // arms
+  if(happy){
+    px(cx-50,y-10,14,48,'#ffc9a3');
+    px(cx+36,y-10,14,48,'#ffc9a3');
+    em('✨',cx-58,y-18,20); em('⭐',cx+58,y-20,20);
+  }else{
+    px(cx-50,y+25+bob,14,44,'#ffc9a3');
+    px(cx+36,y+25-bob,14,44,'#ffc9a3');
+  }
+
+  // head / hair
+  circ(cx,y-12,35,'#ffc9a3','#8a4b18',2);
+  ctx.beginPath();ctx.arc(cx,y-15,40,Math.PI*0.75,Math.PI*2.25);
+  ctx.strokeStyle='#8a4b18';ctx.lineWidth=12;ctx.stroke();
+  px(cx-38,y-22,10,32,'#8a4b18');px(cx+28,y-22,10,32,'#8a4b18');
+
+  // chef hat
+  circ(cx-20,y-48,15,'#fff');circ(cx,y-58,20,'#fff');circ(cx+20,y-48,15,'#fff');
+  px(cx-29,y-40,58,14,'#fff','#ddd',1);
+
+  if(happy){
+    px(cx-14,y-18,7,7,'#222');px(cx+7,y-18,7,7,'#222');
+    ctx.beginPath();ctx.arc(cx,y-4,17,0,Math.PI);ctx.strokeStyle='#c0392b';ctx.lineWidth=5;ctx.stroke();
+    ctx.globalAlpha=.45;circ(cx-22,y-2,7,'#ff8fab');circ(cx+22,y-2,7,'#ff8fab');ctx.globalAlpha=1;
+    em('🏆',cx,y+108,44);
+  }else if(cry){
+    px(cx-15,y-20,9,6,'#222');px(cx+7,y-20,9,6,'#222');
+    ctx.beginPath();ctx.arc(cx,y+5,15,Math.PI,0);ctx.strokeStyle='#a4161a';ctx.lineWidth=5;ctx.stroke();
+    circ(cx-11,y-4+Math.abs(bob)*2,5,'#74c0fc');circ(cx+13,y-2+Math.abs(bob)*2,5,'#74c0fc');
+    px(cx-15,y+2,7,36+Math.abs(bob)*5,'rgba(116,192,252,0.78)');
+    px(cx+10,y+4,7,34+Math.abs(bob)*5,'rgba(116,192,252,0.78)');
+    em('💔',cx+67,y-37,32);
+  }
+  ctx.restore();
+}
+
+function drawGameOverScreen(){
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,RW,RH);
+
+  const margin=22;
+  const pw=RW-margin*2;
+  const ph=Math.min(620,RH-70);
+  const px2=margin;
+  const py2=Math.max(28,(RH-ph)/2);
+
+  px(px2+4,py2+5,pw,ph,'rgba(0,0,0,0.45)');
+  px(px2,py2,pw,ph,'#2d1b0e','#ff4444',5);
+  px(px2,py2,pw,24,'rgba(255,0,0,0.28)');
+
+  drawSamantinaMini(RW/2,py2+135,'cry');
+
+  txt('GAME OVER',RW/2,py2+270,34,'#ff4444','center',true);
+  txt('Puntaje: '+G.score,RW/2,py2+324,22,'#fff','center');
+  txt('Dinero: $'+G.money,RW/2,py2+360,21,'#ffd700','center');
+  txt('Platos servidos: '+G.totalServed,RW/2,py2+394,17,'#ddd','center');
+
+  const bw=pw-58,bh=58,bx=px2+29,by=py2+ph-92;
+  px(bx,by,bw,bh,'#8b0000','#ff4444',4);
+  txt('Toca para continuar',RW/2,by+bh/2,18,'#fff','center');
+  ctx.restore();
+}
+
+function drawVictoryScreen(){
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  const bg=ctx.createLinearGradient(0,0,0,RH);
+  bg.addColorStop(0,'#fff6b8');bg.addColorStop(1,'#f5c96a');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,RW,RH);
+
+  // celebracion ligera sin saturar
+  if(G.ticks%3===0) spawnParticles(RW/2,260,['#fff','#ffe066','#ff8fab','#9bf6ff','#b197fc'],1,true);
+  particles=particles.filter(p=>{
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.05;p.life--;
+    ctx.globalAlpha=Math.max(0,p.life/p.maxLife);
+    ctx.fillStyle=p.color;ctx.fillRect(~~p.x,~~p.y,~~p.size,~~p.size);
+    ctx.globalAlpha=1;
+    return p.life>0;
+  });
+
+  const margin=20;
+  const pw=RW-margin*2;
+  const ph=Math.min(690,RH-52);
+  const px2=margin;
+  const py2=Math.max(20,(RH-ph)/2);
+
+  px(px2+4,py2+5,pw,ph,'rgba(92,46,0,0.22)');
+  px(px2,py2,pw,ph,'rgba(255,248,210,0.98)','#ffd700',6);
+  px(px2,py2,pw,24,'rgba(255,215,0,0.22)');
+
+  txt('🏆 ¡VICTORIA! 🏆',RW/2,py2+58,29,'#5c2e00','center',true);
+  txt('¡Samantina lo logró!',RW/2,py2+96,18,'#7a4000','center');
+
+  drawSamantinaMini(RW/2,py2+205,'happy');
+
+  const infoY=py2+365;
+  px(px2+30,infoY-24,pw-60,170,'rgba(255,255,255,0.55)','#f59f00',3);
+  txt('XP alcanzado: '+G.xp,RW/2,infoY+6,20,'#f59f00','center');
+  txt('Platos servidos: '+G.totalServed,RW/2,infoY+42,19,'#5c2e00','center');
+  txt('Dinero ganado: $'+G.money,RW/2,infoY+78,19,'#2b9348','center');
+  txt('Mejor puntuacion: '+G.best,RW/2,infoY+114,17,'#7a4000','center');
+
+  const bw=pw-58,bh=58,bx=px2+29,by=py2+ph-88;
+  px(bx,by,bw,bh,'#f59f00','#5c2e00',4);
+  txt('Toca para jugar de nuevo',RW/2,by+bh/2,17,'#3a1000','center');
+  ctx.restore();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2261,29 +2371,64 @@ function drawMobileIngredientPanel(){
   if(G.state==='cooking'||G.state==='menu'||G.state==='gameover'||G.state==='victory'||G.shopOpen)return;
   const cur=G.clients.find(c=>c.status==='waiting');
   if(!cur)return;
-  const pw=RW-24, ph=92, x=12, y=RH-ph-12;
-  pxM(x+3,y+3,pw,ph,'rgba(0,0,0,0.25)');
-  pxM(x,y,pw,ph,'rgba(20,10,0,0.92)','#f59f00',3);
+
+  // Barra inferior fija: pedido + ingredientes + estado del cliente.
+  const pw=RW-24, ph=118, x=12, y=RH-ph-12;
+  pxM(x+3,y+3,pw,ph,'rgba(0,0,0,0.28)');
+  pxM(x,y,pw,ph,'rgba(20,10,0,0.94)','#f59f00',3);
+
+  // Encabezado del pedido siempre visible.
   txtM('PEDIDO: '+cur.recipe.dish+' '+cur.recipe.name,x+16,y+18,14,'#ffd700','left',true);
-  const timeFrac=1-(cur.patienceTimer/cur.patienceMax);
+  txtM('Juntados '+collectedCount()+'/5',x+pw-16,y+18,12,'#fff','right',true);
+
+  // Caja fija de estado del cliente dentro de la barra inferior.
+  const stateW=132, stateH=72;
+  const stateX=x+pw-stateW-12;
+  const stateY=y+34;
+  const timeFrac=Math.max(0,Math.min(1,1-(cur.patienceTimer/cur.patienceMax)));
   const secondsLeft=Math.max(0,Math.ceil((cur.patienceMax-cur.patienceTimer)/60));
   const barColor=timeFrac>0.6?'#51cf66':timeFrac>0.3?'#fcc419':'#ff6b6b';
-  const mood=timeFrac<0.25?'😡':timeFrac<0.55?'😐':'🙂';
-  txtM(mood+' '+secondsLeft+'s',x+pw-150,y+18,12,barColor,'center',true);
-  pxM(x+pw-205,y+28,110,6,'rgba(255,255,255,0.16)');
-  pxM(x+pw-205,y+28,110*Math.max(0,timeFrac),6,barColor);
-  txtM('Juntados '+collectedCount()+'/5',x+pw-16,y+18,12,'#fff','right',true);
-  const slotW=(pw-32)/5;
+  let mood='🙂', label='TRANQUILO';
+  if(timeFrac<0.25){mood='😡';label='URGENTE';}
+  else if(timeFrac<0.55){mood='😐';label='ESPERANDO';}
+
+  pxM(stateX+2,stateY+2,stateW,stateH,'rgba(0,0,0,0.25)');
+  pxM(stateX,stateY,stateW,stateH,'rgba(0,0,0,0.72)',timeFrac<0.25?'#ff4444':'#f59f00',2);
+  txtM('CLIENTE',stateX+stateW/2,stateY+11,10,'#ffd700','center',true);
+  emM(mood,stateX+27,stateY+35,24);
+  txtM(secondsLeft+'s',stateX+82,stateY+31,19,'#fff','center',true);
+  txtM(label,stateX+82,stateY+50,9,barColor,'center',true);
+  pxM(stateX+12,stateY+58,stateW-24,8,'rgba(255,255,255,0.16)');
+  pxM(stateX+12,stateY+58,(stateW-24)*timeFrac,8,barColor);
+  if(timeFrac<0.18){
+    ctx.save();
+    ctx.globalAlpha=0.28+Math.sin(G.ticks*0.35)*0.24;
+    pxM(stateX,stateY,stateW,stateH,'rgba(255,0,0,0.35)');
+    ctx.restore();
+  }
+
+  // Ingredientes marcados por posición correcta de la receta, no secuencial.
+  const leftW=stateX-x-20;
+  const slotW=(leftW-10)/5;
   for(let i=0;i<5;i++){
-    const sx=x+16+i*slotW, sy=y+34;
+    const sx=x+12+i*slotW, sy=y+44;
     const filled=!!G.collected[i];
     const correct=filled&&G.collected[i]===cur.recipe.need[i];
-    const bg=filled?(correct?'rgba(81,207,102,0.35)':'rgba(255,107,107,0.35)'):'rgba(255,255,255,0.08)';
-    pxM(sx,sy,slotW-8,42,bg,'rgba(255,255,255,0.18)',2);
-    if(filled)emM(G.collected[i],sx+(slotW-8)/2,sy+21,25);
-    else emM(cur.recipe.need[i]||'•',sx+(slotW-8)/2,sy+21,21);
+    const bg=filled?(correct?'rgba(81,207,102,0.38)':'rgba(255,107,107,0.38)'):'rgba(255,255,255,0.08)';
+    const border=filled?(correct?'#51cf66':'#ff6b6b'):'rgba(255,255,255,0.18)';
+    pxM(sx,sy,slotW-6,52,bg,border,2);
+    if(filled){
+      emM(G.collected[i],sx+(slotW-6)/2,sy+25,27);
+      txtM('✓',sx+slotW-16,sy+9,10,correct?'#b2f2bb':'#ffc9c9','center');
+    }else{
+      emM(cur.recipe.need[i]||'•',sx+(slotW-6)/2,sy+23,24);
+      ctx.save();ctx.globalAlpha=0.35;
+      txtM((i+1)+'',sx+8,sy+9,9,'#fff','left');
+      ctx.restore();
+    }
   }
 }
+
 
 // ═══════════════════════════════════════════════════════════════════
 // DRAW
@@ -2329,9 +2474,18 @@ function draw(){
   drawPrepOverlay();
   drawCookingOverlay();
 
-  if(G.state==='gameover')drawGameOver();
-  if(G.state==='victory')drawVictory();
   ctx.restore();
+
+  // Escenas finales dibujadas en coordenadas de pantalla vertical,
+  // no dentro de la cámara del mundo. Así no se cortan en teléfono.
+  if(G.state==='gameover'){
+    drawGameOverScreen();
+    return;
+  }
+  if(G.state==='victory'){
+    drawVictoryScreen();
+    return;
+  }
 
   drawMobileHUD();
   drawMobileIngredientPanel();
