@@ -142,7 +142,12 @@ ctx.imageSmoothingEnabled=false;
 const GW=960,GH=640;
 // Canvas vertical real para teléfono. El mundo se adapta a este lienzo tipo celular.
 const RW=540,RH=820;
-const RENDER_SX=RW/GW, RENDER_SY=RH/GH;
+// Render vertical sin deformar: usamos cámara y zoom uniforme.
+const FIT_SCALE=RW/GW;
+const RENDER_SX=FIT_SCALE, RENDER_SY=FIT_SCALE;
+let camX=0, camY=0;
+const GAME_ZOOM=1.22;
+const GAME_TOP=10;
 let canvasScale=1,canvasOffX=0,canvasOffY=0;
 function controlHeight(){
   const ctrl=document.getElementById('ctrl');
@@ -170,7 +175,15 @@ function resize(){
 function screenToWorld(e){
   const rx=(e.clientX-canvasOffX)/canvasScale;
   const ry=(e.clientY-canvasOffY)/canvasScale;
-  return {mx:rx/RENDER_SX,my:ry/RENDER_SY,rx,ry};
+  // Menú y tienda se dibujan a escala uniforme completa.
+  if(G.state==='menu' || G.shopOpen){
+    const fit=FIT_SCALE;
+    const ox=(RW-GW*fit)/2;
+    const oy=(RH-GH*fit)/2;
+    return {mx:(rx-ox)/fit,my:(ry-oy)/fit,rx,ry};
+  }
+  // Juego vertical: cámara lateral sin comprimir personajes.
+  return {mx:camX+(rx/GAME_ZOOM),my:camY+((ry-GAME_TOP)/GAME_ZOOM),rx,ry};
 }
 window.addEventListener('resize',resize);
 // Resize when ctrl bar shows/hides
@@ -2097,20 +2110,110 @@ function update(){
   updateSecret();
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// MOBILE VERTICAL HUD - fijo, sin compresión
+// ═══════════════════════════════════════════════════════════════════
+function txtM(t,x,y,size,color,align,shadow){
+  ctx.save();
+  ctx.font=`900 ${size}px "Courier New",monospace`;
+  ctx.textAlign=align||'left';ctx.textBaseline='middle';
+  if(shadow){ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillText(t,~~x+2,~~y+2);}
+  ctx.fillStyle=color;ctx.fillText(t,~~x,~~y);ctx.restore();
+}
+function pxM(x,y,w,h,fill,stroke,sw){
+  ctx.fillStyle=fill;ctx.fillRect(~~x,~~y,~~w,~~h);
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=sw||2;ctx.strokeRect(~~x,~~y,~~w,~~h);}
+}
+function emM(e,x,y,size){
+  ctx.save();ctx.font=`${size}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(e,~~x,~~y);ctx.restore();
+}
+function drawMobileHUD(){
+  if(G.state==='gameover'||G.state==='victory')return;
+  const h=72;
+  pxM(0,0,RW,h,'rgba(16,7,0,0.94)');
+  pxM(0,h-3,RW,3,'#f59f00');
+
+  // Estrellas amarillas/grises
+  for(let i=0;i<3;i++){
+    txtM('⭐',18+i*28,25,24,i<G.stars?'#ffd700':'#555','left',true);
+  }
+
+  const rank=currentRank();
+  txtM(rank.emoji+' '+rank.label,112,21,15,'#ffd700','left',true);
+  txtM('💰 $'+G.money,112,47,15,'#51cf66','left',true);
+
+  const barX=248,barY=18,barW=190,barH=14;
+  const nextRankIdx=Math.min(XP_RANKS.length-1,currentRankIdx()+1);
+  const xpStart=currentRank().xp;
+  const xpEnd=XP_RANKS[nextRankIdx].xp||XP_VICTORY;
+  const xpFrac=Math.min(1,(G.xp-xpStart)/Math.max(1,xpEnd-xpStart));
+  pxM(barX,barY,barW,barH,'rgba(0,0,0,0.45)','#4a2400',1);
+  pxM(barX+1,barY+1,(barW-2)*xpFrac,barH-2,'#ffd700');
+  txtM('XP '+G.xp,barX+barW/2,barY+31,11,'#eee','center',true);
+
+  // Botón tienda fijo arriba derecha, pero con rectángulo equivalente en mundo para el handler existente.
+  const sx=RW-74, sy=12, sw=62, sh=48;
+  pxM(sx,sy,sw,sh,'#2a1000','#f59f00',2);
+  txtM('🛒',sx+sw/2,sy+16,18,'#ffd700','center');
+  txtM('$'+G.money,sx+sw/2,sy+36,11,'#51cf66','center');
+  drawHUD._shopRect={x:camX+sx/GAME_ZOOM,y:camY+(sy-GAME_TOP)/GAME_ZOOM,w:sw/GAME_ZOOM,h:sh/GAME_ZOOM};
+}
+function drawMobileIngredientPanel(){
+  if(G.state==='cooking'||G.state==='menu'||G.state==='gameover'||G.state==='victory'||G.shopOpen)return;
+  const cur=G.clients.find(c=>c.status==='waiting');
+  if(!cur)return;
+  const pw=RW-24, ph=92, x=12, y=RH-ph-12;
+  pxM(x+3,y+3,pw,ph,'rgba(0,0,0,0.25)');
+  pxM(x,y,pw,ph,'rgba(20,10,0,0.92)','#f59f00',3);
+  txtM('PEDIDO: '+cur.recipe.dish+' '+cur.recipe.name,x+16,y+18,14,'#ffd700','left',true);
+  txtM('Juntados '+G.collected.length+'/5',x+pw-16,y+18,12,'#fff','right',true);
+  const slotW=(pw-32)/5;
+  for(let i=0;i<5;i++){
+    const sx=x+16+i*slotW, sy=y+34;
+    const filled=!!G.collected[i];
+    const correct=filled&&cur.recipe.need.includes(G.collected[i]);
+    const bg=filled?(correct?'rgba(81,207,102,0.35)':'rgba(255,107,107,0.35)'):'rgba(255,255,255,0.08)';
+    pxM(sx,sy,slotW-8,42,bg,'rgba(255,255,255,0.18)',2);
+    if(filled)emM(G.collected[i],sx+(slotW-8)/2,sy+21,25);
+    else emM(cur.recipe.need[i]||'•',sx+(slotW-8)/2,sy+21,21);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // DRAW
 // ═══════════════════════════════════════════════════════════════════
 function draw(){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.clearRect(0,0,RW,RH);
+
+  // Fondo vertical del teléfono.
+  const phoneBg=ctx.createLinearGradient(0,0,0,RH);
+  phoneBg.addColorStop(0,'#2a1200');phoneBg.addColorStop(1,'#0c0400');
+  ctx.fillStyle=phoneBg;ctx.fillRect(0,0,RW,RH);
+
+  if(G.state==='menu'){
+    ctx.save();
+    const fit=FIT_SCALE, ox=(RW-GW*fit)/2, oy=(RH-GH*fit)/2;
+    ctx.translate(ox,oy);ctx.scale(fit,fit);
+    drawMenu();
+    if(G.shopOpen)drawShop();
+    ctx.restore();
+    return;
+  }
+
+  // Cámara vertical: mantiene proporciones reales y sigue a Samantina en horizontal.
+  const viewW=RW/GAME_ZOOM, viewH=(RH-GAME_TOP)/GAME_ZOOM;
+  camX=Math.max(0,Math.min(GW-viewW,Sam.x+Sam.w/2-viewW/2));
+  camY=Math.max(0,Math.min(Math.max(0,GH-viewH),Sam.y+Sam.h/2-viewH/2));
+
   ctx.save();
-  // Escala todo el mundo horizontal original a un canvas vertical de teléfono.
-  ctx.scale(RENDER_SX,RENDER_SY);
+  ctx.translate(0,GAME_TOP);
+  ctx.scale(GAME_ZOOM,GAME_ZOOM);
+  ctx.translate(-camX,-camY);
   if(screenShake>0 && G.state!=='gameover'){
     ctx.translate((Math.random()-0.5)*screenShake*1.5,(Math.random()-0.5)*screenShake*1.5);
   }
-
-  if(G.state==='menu'){drawMenu();ctx.restore();return;}
 
   drawKitchen();
   drawShelf();
@@ -2118,16 +2221,23 @@ function draw(){
   drawSecret();
   drawSam();
   updateDrawEffects();
-  drawHUD();
-  drawIngredientPanel();
   drawPrepOverlay();
   drawCookingOverlay();
 
   if(G.state==='gameover')drawGameOver();
   if(G.state==='victory')drawVictory();
-  if(G.shopOpen)drawShop();
-
   ctx.restore();
+
+  drawMobileHUD();
+  drawMobileIngredientPanel();
+
+  if(G.shopOpen){
+    ctx.save();
+    const fit=FIT_SCALE, ox=(RW-GW*fit)/2, oy=(RH-GH*fit)/2;
+    ctx.translate(ox,oy);ctx.scale(fit,fit);
+    drawShop();
+    ctx.restore();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
