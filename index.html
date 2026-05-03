@@ -56,17 +56,20 @@ html,body{
   flex-shrink:0;
 }
 .dp{
-  background:rgba(255,255,255,0.1);
-  border:2px solid rgba(255,255,255,0.2);
-  border-radius:12px;
+  background:linear-gradient(135deg,rgba(40,40,45,0.95),rgba(15,15,20,0.95));
+  border:2px solid rgba(255,255,255,0.45);
+  border-radius:14px;
   display:flex;align-items:center;justify-content:center;
   font-size:22px;
+  font-weight:900;
   cursor:pointer;
   pointer-events:all;
-  transition:background 0.07s,transform 0.07s;
+  transition:background 0.07s,transform 0.07s,box-shadow 0.07s;
   color:#fff;
+  text-shadow:0 2px 4px rgba(0,0,0,0.75);
+  box-shadow:0 4px 12px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.18);
 }
-.dp:active,.dp.on{background:rgba(255,200,60,0.45);transform:scale(0.92)}
+.dp:active,.dp.on{background:linear-gradient(135deg,#f59f00,#ffb703);transform:scale(0.92);color:#fff;box-shadow:0 2px 6px rgba(0,0,0,0.5)}
 /* Action buttons */
 #btns{display:flex;gap:clamp(6px,2vw,10px);align-items:center;justify-content:flex-end;flex-shrink:0}
 .gb{
@@ -89,7 +92,7 @@ html,body{
 @media (orientation:portrait){
   #ctrl{--ctrl-h:clamp(132px,20vh,164px);align-items:center}
   #dpad{grid-template-columns:repeat(3,clamp(38px,12vw,50px));grid-template-rows:repeat(3,clamp(38px,12vw,50px))}
-  .dp{border-radius:14px;font-size:clamp(18px,5vw,22px)}
+  .dp{border-radius:14px;font-size:clamp(18px,5vw,22px);color:#fff}
   #btns{gap:6px}
   .gb span{font-size:8px!important}
 }
@@ -2112,15 +2115,34 @@ function checkGameOver(){
 }
 
 function startGame(){
-  // Inicio real desde nivel 1 / Aprendiz
-  // Antes estaba en modo prueba: XP 1200, dinero 500 y rango Chef Estrella.
-  G.xp=0;G.score=0;G.money=0;G.stars=3;G.rankIdx=0;G.totalServed=0;
-  // Apply upgrades from shop
-  G.upgrades.hatColor=shopBought.includes('hatGold')?'gold':shopBought.includes('hatBlue')?'blue':shopBought.includes('hatPink')?'pink':'white';
-  G.upgrades.extraTime=(shopBought.includes('time2')?10:0)+(shopBought.includes('time1')?5:0);
-  G.upgrades.fasterWalk=shopBought.includes('walk');
-  G.upgrades.biggerRange=shopBought.includes('range');
-  G.upgrades.doublePoints=shopBought.includes('double');
+  // NUEVA PARTIDA TOTAL: arranca siempre desde cero, incluyendo tienda y compras guardadas.
+  shopBought=[];
+  localStorage.removeItem('sch2_shop');
+  localStorage.removeItem('sch2_best');
+  localStorage.removeItem('sch2_money');
+
+  G.xp=0;
+  G.score=0;
+  G.money=0;
+  G.best=0;
+  G.bestMoney=0;
+  G.stars=3;
+  G.rankIdx=0;
+  G.totalServed=0;
+  G.secretActive=false;
+  G.secretTimer=0;
+  G.secretBonus=false;
+
+  // Sin mejoras compradas al iniciar nueva partida.
+  G.upgrades={
+    hatColor:'white',
+    extraTime:0,
+    fasterWalk:false,
+    biggerRange:false,
+    doublePoints:false,
+    extraLife:false,
+  };
+
   forceLevelOneStart();
   initGame();
 }
