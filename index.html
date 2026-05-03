@@ -223,6 +223,17 @@ function playSecret(){
 }
 function playCoin(){beep(880,0.06,'sine',0.05);setTimeout(()=>beep(1200,0.1,'sine',0.05),70);}
 function playTick(){beep(440,0.03,'square',0.02);}
+function playUrgentTick(){
+  // Tic-tic suave cuando queda poco tiempo al cliente
+  beep(520,0.035,'square',0.022);
+  beep(520,0.035,'square',0.018,0.09);
+}
+function playKitchenBell(){
+  // Campana tipo cocina: plato listo
+  beep(1320,0.10,'sine',0.07);
+  beep(1760,0.16,'sine',0.055,0.11);
+  beep(880,0.10,'triangle',0.035,0.28);
+}
 
 let bgMusicTimer=null,bgStep=0;
 const COLLECT_MELODY=[392,440,494,523,587,523,494,440];
@@ -1537,6 +1548,7 @@ function spawnClientIntoQueue(){
     departureT:0,
     patienceTimer:0,
     patienceMax:patienceForRank(),
+    lastUrgentSecond:null,
     reaction:null,
     stars:0,
     bobOff:Math.random()*Math.PI*2,
@@ -1857,10 +1869,10 @@ function pressTiming(){
   G.tray.push(plate);
   if(quality==='bad'){
     addFloat('Plato listo... (ingredientes raros)',Sam.x+17,Sam.y,'#fcc419',1.0);
-    beep(300,0.1,'square',0.03);
+    playKitchenBell();
   } else {
     addFloat('¡Plato listo! Ve al mostrador.',Sam.x+17,Sam.y,quality==='perfect'?'#51cf66':'#fcc419',1.1);
-    beep(quality==='perfect'?880:500,0.1,'triangle',0.05);
+    playKitchenBell();
   }
   G.state='collect';
   stopBGMusic();startBGMusic('collect');
@@ -2167,6 +2179,14 @@ function update(){
     // Tick warning sounds
     if(cl.patienceTimer===~~(cl.patienceMax*0.75))playTick();
     if(cl.patienceTimer===~~(cl.patienceMax*0.9))playTick();
+
+    // Tic-tic repetido cuando queda poco tiempo (últimos 5 segundos).
+    const secondsLeft=Math.max(0,Math.ceil((cl.patienceMax-cl.patienceTimer)/60));
+    if(secondsLeft<=5 && secondsLeft>0 && cl.lastUrgentSecond!==secondsLeft){
+      cl.lastUrgentSecond=secondsLeft;
+      playUrgentTick();
+    }
+
     if(cl.patienceTimer>=cl.patienceMax){
       // Client leaves angry — lose a star
       cl.status='leaving';cl.departureT=0;cl.reaction='bad';
