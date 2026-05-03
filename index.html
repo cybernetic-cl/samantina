@@ -6,13 +6,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Samantina Chef</title>
+<title>Samantina Chef Vertical</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{
   width:100%;height:100%;
   overflow:hidden;
   background:#1a0800;
+  overscroll-behavior:none;
   touch-action:none;
   user-select:none;
   -webkit-user-select:none;
@@ -137,7 +138,11 @@ html,body{
 const C=document.getElementById('c');
 const ctx=C.getContext('2d');
 ctx.imageSmoothingEnabled=false;
+// Mundo interno original: mantiene toda la lógica y posiciones del juego.
 const GW=960,GH=640;
+// Canvas vertical real para teléfono. El mundo se adapta a este lienzo tipo celular.
+const RW=540,RH=820;
+const RENDER_SX=RW/GW, RENDER_SY=RH/GH;
 let canvasScale=1,canvasOffX=0,canvasOffY=0;
 function controlHeight(){
   const ctrl=document.getElementById('ctrl');
@@ -147,20 +152,25 @@ function controlHeight(){
 function resize(){
   const vw=window.innerWidth,vh=window.innerHeight;
   const ctrlH=controlHeight();
-  const availH=Math.max(260,vh-ctrlH);
-  const portrait=vh>vw;
-  // En vertical se prioriza el ancho para que no quede aplastado ni con botones encima.
-  let sc=Math.min(vw/GW,availH/GH);
-  if(portrait) sc=Math.min(vw/GW,availH/GH);
-  canvasScale=sc;
-  const cw=GW*canvasScale, ch=GH*canvasScale;
-  C.width=GW; C.height=GH;
+  const availH=Math.max(360,vh-ctrlH);
+
+  // Modo vertical nativo: el canvas siempre es más alto que ancho.
+  canvasScale=Math.min(vw/RW,availH/RH);
+  const cw=RW*canvasScale, ch=RH*canvasScale;
+
+  C.width=RW; C.height=RH;
   C.style.width=cw+'px';
   C.style.height=ch+'px';
+
   canvasOffX=(vw-cw)/2;
   canvasOffY=Math.max(0,(availH-ch)/2);
   C.style.left=canvasOffX+'px';
   C.style.top=canvasOffY+'px';
+}
+function screenToWorld(e){
+  const rx=(e.clientX-canvasOffX)/canvasScale;
+  const ry=(e.clientY-canvasOffY)/canvasScale;
+  return {mx:rx/RENDER_SX,my:ry/RENDER_SY,rx,ry};
 }
 window.addEventListener('resize',resize);
 // Resize when ctrl bar shows/hides
@@ -942,7 +952,12 @@ function drawHUD(){
   px(0,50,GW,3,'#f59f00');
 
   // Stars (lives)
-  txt('⭐'.repeat(Math.max(0,~~G.stars))+'☆'.repeat(Math.max(0,3-~~G.stars)),14,26,20,'#ffd700','left');
+  // Estrellas de vida: activas en amarillo, perdidas en gris
+  for(let i=0;i<3;i++){
+    const starX = 14 + i*24;
+    const starColor = i < Math.max(0,~~G.stars) ? '#ffd700' : '#555';
+    txt('⭐', starX, 26, 20, starColor, 'left');
+  }
   // Rank
   const rank=currentRank();
   txt(rank.emoji+' '+rank.label,96,26,15,'#ffd700','left');
@@ -1404,6 +1419,24 @@ function patienceForRank(){
   return (currentRank().patience + G.upgrades.extraTime)*60;
 }
 
+
+function forceLevelOneStart(){
+  // Limpia cualquier estado viejo de prueba y asegura nivel 1.
+  G.xp=0;
+  G.rankIdx=0;
+  G.score=0;
+  G.money=0;
+  G.stars=G.upgrades.extraLife?4:3;
+  G.secretBonus=false;
+  G.secretActive=false;
+  G.collected=[];
+  G.holding=null;
+  G.tray=[];
+  G.clients=[];
+  G.clientQueue=[];
+  G.stoves.forEach(st=>{st.state='idle';st.item=null;st.timer=0;st.max=0;st.recipeId=-1;st.quality='';});
+}
+
 function spawnClientIntoQueue(){
   const rank=currentRank();
   const pool=rank.recipePool;
@@ -1843,13 +1876,16 @@ function checkGameOver(){
 }
 
 function startGame(){
-  G.xp=1200;G.score=0;G.money=500;G.stars=3;G.rankIdx=6;G.totalServed=0;
+  // Inicio real desde nivel 1 / Aprendiz
+  // Antes estaba en modo prueba: XP 1200, dinero 500 y rango Chef Estrella.
+  G.xp=0;G.score=0;G.money=0;G.stars=3;G.rankIdx=0;G.totalServed=0;
   // Apply upgrades from shop
   G.upgrades.hatColor=shopBought.includes('hatGold')?'gold':shopBought.includes('hatBlue')?'blue':shopBought.includes('hatPink')?'pink':'white';
   G.upgrades.extraTime=(shopBought.includes('time2')?10:0)+(shopBought.includes('time1')?5:0);
   G.upgrades.fasterWalk=shopBought.includes('walk');
   G.upgrades.biggerRange=shopBought.includes('range');
   G.upgrades.doublePoints=shopBought.includes('double');
+  forceLevelOneStart();
   initGame();
 }
 
@@ -2065,7 +2101,11 @@ function update(){
 // DRAW
 // ═══════════════════════════════════════════════════════════════════
 function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,RW,RH);
   ctx.save();
+  // Escala todo el mundo horizontal original a un canvas vertical de teléfono.
+  ctx.scale(RENDER_SX,RENDER_SY);
   if(screenShake>0 && G.state!=='gameover'){
     ctx.translate((Math.random()-0.5)*screenShake*1.5,(Math.random()-0.5)*screenShake*1.5);
   }
@@ -2142,8 +2182,7 @@ document.getElementById('bDrop').addEventListener('pointerdown',e=>{e.preventDef
 let shopScrollStart=0,shopScrollYStart=0,shopDragging=false;
 
 C.addEventListener('pointerdown',e=>{
-  const mx=(e.clientX-canvasOffX)/canvasScale;
-  const my=(e.clientY-canvasOffY)/canvasScale;
+  const {mx,my}=screenToWorld(e);
 
   if(G.shopOpen){
     shopScrollStart=e.clientY;
@@ -2178,7 +2217,7 @@ C.addEventListener('pointerdown',e=>{
 
 C.addEventListener('pointermove',e=>{
   if(!shopDragging)return;
-  const dy=(e.clientY-shopScrollStart)/canvasScale;
+  const dy=(e.clientY-shopScrollStart)/canvasScale/RENDER_SY;
   const maxScroll=Math.max(0,(drawShop._totalH||0)-(GH-64));
   shopScrollY=Math.max(0,Math.min(maxScroll,shopScrollYStart-dy));
 });
@@ -2189,9 +2228,7 @@ C.addEventListener('pointerup',e=>{
   shopDragging=false;
   if(dy<10){
     // It was a tap
-    const rect=C.getBoundingClientRect();
-    const mx=(e.clientX-rect.left)*(GW/rect.width);
-    const my=(e.clientY-rect.top)*(GH/rect.height);
+    const {mx,my}=screenToWorld(e);
     handleShopClick(mx,my);
   }
 });
