@@ -276,14 +276,15 @@ const RECIPES=[
 // XP per good plate: ~30-80. Need ~600 XP for Master Chef.
 // Rough: 8-10 plates/min * 50xp avg = 400-500 xp/min → 5min = 2000-2500 XP
 const XP_RANKS=[
-  {xp:0,    label:'Aprendiz',     emoji:'🧑‍🍳', maxClients:1, recipePool:[0,1],     patience:75},
-  {xp:80,   label:'Cocinero',     emoji:'👨‍🍳', maxClients:1, recipePool:[0,1,2],   patience:70},
-  {xp:200,  label:'Chef Junior',  emoji:'🍳',  maxClients:2, recipePool:[0,1,2,3], patience:65},
-  {xp:380,  label:'Chef',         emoji:'🍕',  maxClients:2, recipePool:[2,3,4,5], patience:60},
-  {xp:600,  label:'Chef Senior',  emoji:'🍔',  maxClients:2, recipePool:[3,4,5,6], patience:55},
-  {xp:880,  label:'Sous Chef',    emoji:'🍣',  maxClients:3, recipePool:[4,5,6,7], patience:50},
-  {xp:1200, label:'Chef Estrella',emoji:'⭐',  maxClients:3, recipePool:[5,6,7,8], patience:46},
-  {xp:1600, label:'Master Chef',  emoji:'🏆',  maxClients:3, recipePool:[6,7,8,9], patience:42},
+  // Tiempo de espera balanceado para móvil: empieza en 30s y baja por nivel.
+  {xp:0,    label:'Aprendiz',     emoji:'🧑‍🍳', maxClients:1, recipePool:[0,1],     patience:30},
+  {xp:80,   label:'Cocinero',     emoji:'👨‍🍳', maxClients:1, recipePool:[0,1,2],   patience:28},
+  {xp:200,  label:'Chef Junior',  emoji:'🍳',  maxClients:2, recipePool:[0,1,2,3], patience:26},
+  {xp:380,  label:'Chef',         emoji:'🍕',  maxClients:2, recipePool:[2,3,4,5], patience:24},
+  {xp:600,  label:'Chef Senior',  emoji:'🍔',  maxClients:2, recipePool:[3,4,5,6], patience:22},
+  {xp:880,  label:'Sous Chef',    emoji:'🍣',  maxClients:3, recipePool:[4,5,6,7], patience:20},
+  {xp:1200, label:'Chef Estrella',emoji:'⭐',  maxClients:3, recipePool:[5,6,7,8], patience:18},
+  {xp:1600, label:'Master Chef',  emoji:'🏆',  maxClients:3, recipePool:[6,7,8,9], patience:16},
 ];
 const XP_VICTORY=2000; // ~5min of good play
 
@@ -2221,7 +2222,8 @@ function update(){
         G.stoves[p.targetStove].max=400;
         G.stoves[p.targetStove].timer=0;
         G.cookFill=0;
-        G.cookSpeed=0.0018+currentRankIdx()*0.0004;
+        // Cocción balanceada: nivel 1 ≈7.2s; niveles altos ≈4.3s.
+        G.cookSpeed=0.0023+currentRankIdx()*0.00022;
         G.state='cooking';
         startBGMusic('cooking');
         spawnParticles(stoveCX,stoveCY,['#ff922b','#ffe066','#ff3b30'],12);
